@@ -1,19 +1,18 @@
 import math
-
 from copy import deepcopy
 
 from core.order_response import OrderStatus
 from core.orders import Order, OrderType, OrderSide
-from core.websocket_client import MessageChannel, AuthenticatedWebSocket, Environment
+from core.websocket_client import BcexClient, Environment
 
 
 class PitInterface:
     REQUIRED_CHANNELS = [MessageChannel.SYMBOLS, MessageChannel.TICKER, MessageChannel.TRADES]
 
     def __init__(self, instruments, api_key=None, env=Environment.STAGING):
-        self.ws = AuthenticatedWebSocket(instruments, channels=self.REQUIRED_CHANNELS,
-                                         api_key=api_key,
-                                         env=env)
+        self.ws = BcexClient(instruments, channels=self.REQUIRED_CHANNELS,
+                             api_key=api_key,
+                             env=env)
 
     def connect(self):
         self.ws.connect()
@@ -32,7 +31,8 @@ class PitInterface:
             price = math.ceil(price_multiple) * ins_details["min_price_increment"] / 10 ** \
                     ins_details["min_price_increment_scale"]
 
-        return Order(OrderType.LIMIT, instrument=instrument, side=side, price=price, quantity=quantity)
+        return Order(OrderType.LIMIT, instrument=instrument, side=side, price=price,
+                     quantity=quantity)
 
     def place_order(self, instrument, side, price, quantity):
         """
