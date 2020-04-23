@@ -3,8 +3,10 @@ import logging
 import os
 import threading
 import time
-from collections import defaultdict
+from decimal import Decimal
 
+from collections import defaultdict
+from sortedcontainers import SortedDict as sd
 import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
@@ -13,6 +15,9 @@ from core.utils import parse_balance
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
 
+class Book:
+    BID = "bids"
+    ASK = "asks"
 
 class Environment:
     DEV = "Development"
@@ -123,14 +128,9 @@ class BcexClient(object):
 
         self.authenticated = False
         self.ws_url = ws_url
-        self.origin_url = origin_url
+        self.origin = origin_url
 
-        if self.instruments is None:
-            raise ValueError("Must have instruments")
-        if not isinstance(self.instruments, list):
-            self.instruments = [self.instruments]
-
-        self._symbols = symbols or ["BTC-USD"]
+        self.symbols = symbols or ["BTC-USD"]
         self.channels = channels or Channel.ALL
         self.channel_kwargs = channel_kwargs or {}
 
@@ -146,13 +146,18 @@ class BcexClient(object):
         # use these dictionaries to store the data we receive
         self.balances = {}
         self.tickers = {}
+
+        self.l2_book = {}
+        for symbol in self.symbols:
+            self.l2_book[symbol] = {"bids": sd(), "asks": sd()}
+
         self.candles = defaultdict(list)
         self.market_trades = defaultdict(list)
         self.open_orders = dict()
 
     def _check_attributes(self):
         for attr, _type in [
-            ("_symbols", list),
+            ("symbols", list),
             ("channels", list),
             ("channel_kwargs", dict),
             ("url", str),
@@ -175,7 +180,7 @@ class BcexClient(object):
 
     def _public_subscription(self):
         for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
-            for i in self._symbols:
+            for i in self.symbols:
                 s = {"action": "subscribe", "channel": channel, "symbol": i}
                 kwargs = self.channel_kwargs.get(channel)
                 if kwargs:
@@ -244,8 +249,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
-        print(msg)
-        # TODO: replace with generic
+        # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
         if msg["channel"] == Channel.TRADING:
@@ -318,10 +322,33 @@ class BcexClient(object):
             self.tickers[msg["symbol"]] = msg["last_trade_price"]
 
     def _on_l2_updates(self, msg):
-        raise NotImplementedError(f"We have not implemented l2 updates")
+        logging.info(msg)
+        symbol = msg["symbol"]
+        if msg["event"]  == Event.SNAPSHOT:
+            self.l2_books[symbol] = {Book.BID: sd(), Book.ASK: sd()}
+
+        if msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
+            for book in [Book.BID, Book.ASK]:
+                updates = msg[book]
+                for data in updates:
+                    price = data['px']
+                    size = data['qty']
+                    if size == 0:
+                        logging.info(f"removing {price}:{size}")
+                        self.l2_book[symbol][book].pop(price)
+
+                    self.l2_book[symbol][book][price] = size
+
+        logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
+                     f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}" )
+
+
+
+
+        # raise NotImplementedError(f"We have not implemented l2 updates")
 
     def _on_l3_updates(self, msg):
-        raise NotImplementedError("We have not implemented l3 updates")
+        logging.info(msg)
 
     def _on_heartbeat_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
@@ -392,7 +419,7 @@ class BcexClient(object):
         order : Order
             the order you want to send
         """
-        if order.instrument not in self.instruments:
+        if order.instrument not in self.symbols:
             logging.error(
                 f"[{order}] Sending orders for an instrument without subscribing to the market is not safe."
                 f" You should subscribe first to instrument {order.instrument}"
@@ -442,9 +469,10 @@ class BcexClient(object):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
     bcex_client = BcexClient(
-        symbols=["BTC-USD", "LTC-USD"],
-        channels=["prices"],
+        symbols=["BTC-USD", "ETH-BTC"],
+        channels=["prices", "l2"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
     )
