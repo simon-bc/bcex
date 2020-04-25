@@ -101,9 +101,7 @@ class ExchangeInterface:
         self.ws.send_order(order)
 
     def cancel_all_orders(self, instrument=None):
-        for merid, status in deepcopy(self.ws.open_orders).items():
-            if instrument is None or status not in OrderStatus.terminal_states():
-                self.ws.send_order(Order(OrderType.CANCEL, order_id=merid))
+        self.ws.cancel_all_orders()
 
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
