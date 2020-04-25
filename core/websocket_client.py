@@ -343,10 +343,6 @@ class BcexClient(object):
                      f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}" )
 
 
-
-
-        # raise NotImplementedError(f"We have not implemented l2 updates")
-
     def _on_l3_updates(self, msg):
         logging.info(msg)
 
@@ -411,6 +407,9 @@ class BcexClient(object):
     def cancel_order(self, order_id):
         return self.send_order(Order(OrderType.CANCEL, order_id=order_id))
 
+    def cancel_all_orders(self):
+        return self.send_order(Order(OrderType.CANCEL, order_id=-999))
+    
     def send_order(self, order):
         """Send an order via the websocket
 
