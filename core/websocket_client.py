@@ -121,10 +121,7 @@ class BcexClient(object):
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
             if not provided, the api key will be taken from environment variable MERCURY_API_KEY
         """
-        if env == Environment.DEV:
-            ws_url = "wss://ws.dev.blockchain.info/mercury-gateway/v1/ws"
-            origin_url = "https://pit.dev.blockchain.info"
-        elif env == Environment.STAGING:
+        if env == Environment.STAGING:
             ws_url = "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
             origin_url = "https://pit.staging.blockchain.info"
         elif env == Environment.PROD:
@@ -163,7 +160,7 @@ class BcexClient(object):
 
         self.candles = defaultdict(list)
         self.market_trades = defaultdict(list)
-        self.open_orders = dict()
+        self.open_orders = defaultdict(dict)
 
     def _check_attributes(self):
         for attr, _type in [
@@ -345,7 +342,6 @@ class BcexClient(object):
             self.tickers[msg["symbol"]] = msg["last_trade_price"]
 
     def _on_l2_updates(self, msg):
-        logging.info(msg)
         symbol = msg["symbol"]
         if msg["event"] == Event.SNAPSHOT:
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
@@ -362,10 +358,10 @@ class BcexClient(object):
 
                     self.l2_book[symbol][book][price] = size
 
-        logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
-                     f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
-                     )
-
+        logging.info(
+            f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
+            f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
+        )
 
     def _on_l3_updates(self, msg):
         logging.info(msg)
@@ -412,11 +408,12 @@ class BcexClient(object):
 
     def _on_order_update(self, msg):
         message = OrderResponse(msg)
-        self.open_orders.update({message.order_id: message})
+        symbol = message.instrument
+        self.open_orders[symbol][message.order_id] = message
 
         if message.order_status in OrderStatus.terminal_states():
             logging.info(f"Order in terminal state: {message.to_str()}")
-            self.open_orders.pop(message.order_id)
+            self.open_orders[symbol].pop(message.order_id)
 
     def _on_orders_snapshot(self, msg):
         """Snapshot of open orders - when we first subscribe to trading channel"""
