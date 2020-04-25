@@ -60,7 +60,13 @@ class OrderResponse:
 
     def to_str(self):
         msg_str = ""
-        for attr in ["client_order_id", "order_id", "execution_id", "order_status", "instrument"]:
+        for attr in [
+            "client_order_id",
+            "order_id",
+            "execution_id",
+            "order_status",
+            "instrument",
+        ]:
             msg_str += f"{attr}: {getattr(self, attr)}, "
 
         return msg_str
