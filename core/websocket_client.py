@@ -15,9 +15,11 @@ from core.utils import parse_balance
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
 
+
 class Book:
     BID = "bids"
     ASK = "asks"
+
 
 class Environment:
     DEV = "Development"
@@ -91,7 +93,12 @@ class BcexClient(object):
     MAX_TRADES_LEN = 200
 
     def __init__(
-        self, symbols, channels=None, channel_kwargs=None, env=Environment.STAGING, api_key=None
+        self,
+        symbols,
+        channels=None,
+        channel_kwargs=None,
+        env=Environment.STAGING,
+        api_key=None,
     ):
         """This class connects to the PIT websocket client
 
@@ -124,13 +131,16 @@ class BcexClient(object):
             ws_url = "wss://ws.prod.blockchain.info/mercury-gateway/v1/ws"
             origin_url = "https://exchange.blockchain.com"
         else:
-            raise ValueError(f"Environment {env} does not have associated ws, api and origin urls")
+            raise ValueError(
+                f"Environment {env} does not have associated ws, api and origin urls"
+            )
 
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
 
-        self.symbols = symbols or ["BTC-USD"]
+        self.symbols = symbols
+        self.symbol_details = {s: {} for s in symbols}
         self.channels = channels or Channel.ALL
         self.channel_kwargs = channel_kwargs or {}
 
@@ -164,7 +174,9 @@ class BcexClient(object):
             ("api_url", str),
         ]:
             if not isinstance(getattr(self, attr), _type):
-                raise ValueError(f"{attr} should be a {_type} not {type(getattr(self, attr))}")
+                raise ValueError(
+                    f"{attr} should be a {_type} not {type(getattr(self, attr))}"
+                )
 
     def _subscribe_channels(self):
         # Public channel subscriptions - symbol specific
@@ -207,7 +219,9 @@ class BcexClient(object):
             on_open=self.on_open,
             on_ping=None,
         )
-        self.wst = threading.Thread(target=lambda: self.ws.run_forever(origin=self.origin))
+        self.wst = threading.Thread(
+            target=lambda: self.ws.run_forever(origin=self.origin)
+        )
         self.wst.daemon = True
         self.wst.start()
 
@@ -219,7 +233,9 @@ class BcexClient(object):
 
         if not conn_timeout:  # i.e. if conn_timeout = 0
             logging.error("Couldn't connect to websocket! Exiting.")
-            raise webs.WebSocketTimeoutException("Couldn't connect to websocket! Exiting.")
+            raise webs.WebSocketTimeoutException(
+                "Couldn't connect to websocket! Exiting."
+            )
 
         self._subscribe_channels()
 
@@ -277,7 +293,9 @@ class BcexClient(object):
 
     def _on_message_unsupported(self, message):
         if message["channel"] in Channel.ALL:
-            logging.warning(f"Messages from channel {message['channel']} not supported by client")
+            logging.warning(
+                f"Messages from channel {message['channel']} not supported by client"
+            )
         else:
             logging.error(
                 f"Websocket returned a message with an unknown channel {message['channel']}"
@@ -288,11 +306,12 @@ class BcexClient(object):
             logging.info(f"Successfully subscribed to symbols")
         elif msg["event"] == Event.SNAPSHOT:
             # TODO: double check
-            self.symbols.update({msg["symbol"]: msg})
+            symbol = msg["symbol"]
+            self.symbol_details.update({symbol: msg})
         elif msg["event"] == Event.UPDATED:
             # TODO: should we drop the extra info
             symbol = msg["symbol"]
-            self.symbols[symbol].update(msg)
+            self.symbol_details[symbol].update(msg)
 
     def _on_market_trade(self, msg):
         """Handle market trades by appending to symbol trade history"""
@@ -302,7 +321,9 @@ class BcexClient(object):
         else:
             trades = self.market_trades[symbol]
             trade = Trade.parse_from_msg(msg)
-            self.market_trades[symbol] = _update_max_list(trades, trade, self.MAX_TRADES_LEN)
+            self.market_trades[symbol] = _update_max_list(
+                trades, trade, self.MAX_TRADES_LEN
+            )
 
     def _on_price_updates(self, msg):
         """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
@@ -313,7 +334,9 @@ class BcexClient(object):
             # TODO: what else would be inside the msg?
             if "price" in msg:
                 candles = self.candles[key]
-                self.candles[key] = _update_max_list(candles, msg["price"], self.MAX_CANDLES_LEN)
+                self.candles[key] = _update_max_list(
+                    candles, msg["price"], self.MAX_CANDLES_LEN
+                )
 
     def _on_ticker_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
@@ -324,26 +347,25 @@ class BcexClient(object):
     def _on_l2_updates(self, msg):
         logging.info(msg)
         symbol = msg["symbol"]
-        if msg["event"]  == Event.SNAPSHOT:
-            self.l2_books[symbol] = {Book.BID: sd(), Book.ASK: sd()}
+        if msg["event"] == Event.SNAPSHOT:
+            self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
 
         if msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
             for book in [Book.BID, Book.ASK]:
                 updates = msg[book]
                 for data in updates:
-                    price = data['px']
-                    size = data['qty']
+                    price = data["px"]
+                    size = data["qty"]
                     if size == 0:
                         logging.info(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
 
                     self.l2_book[symbol][book][price] = size
 
-        logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
-                     f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}" )
-
-
-
+        logging.info(
+            f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
+            f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
+        )
 
         # raise NotImplementedError(f"We have not implemented l2 updates")
 
@@ -463,7 +485,9 @@ class BcexClient(object):
 
         if not timeout:
             logging.error("Couldn't authenticate connection! Exiting.")
-            raise webs.WebSocketTimeoutException("Couldn't authenticate connection! Exiting.")
+            raise webs.WebSocketTimeoutException(
+                "Couldn't authenticate connection! Exiting."
+            )
 
         logging.info("Successfully authenticated")
 

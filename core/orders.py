@@ -56,7 +56,7 @@ class Order:
         self.expiry_date = expiry_date
         self.stop_price = stop_price
         self.minimum_quantity = minimum_quantity
-        self.client_order_id = str(uuid.uuid1())[:10]
+        self.client_order_id = str(uuid.uuid1())[:10] + "_bcexpy"
         self.action = (
             OrderAction.CANCEL_ORDER
             if self.order_type == OrderType.CANCEL
@@ -72,13 +72,17 @@ class Order:
     def check_valid_order(self):
         if self.action is OrderAction.PLACE_ORDER:
             if self.instrument is None:
-                raise ValueError("Must have instrument for order type {}".format(self.order_type))
+                raise ValueError(
+                    "Must have instrument for order type {}".format(self.order_type)
+                )
             if self.time_in_force is None:
                 raise ValueError(
                     "Must have time_in_force for order type {}".format(self.order_type)
                 )
             if self.side is None:
-                raise ValueError("Must have side for order type {}".format(self.order_type))
+                raise ValueError(
+                    "Must have side for order type {}".format(self.order_type)
+                )
             if self.order_quantity is None:
                 raise ValueError(
                     "Must have order_quantity for order type {}".format(self.order_type)
@@ -86,20 +90,28 @@ class Order:
 
         if self.order_type in [OrderType.LIMIT, OrderType.STOP_LIMIT]:
             if self.price is None:
-                raise ValueError("Must have price for order type {}".format(self.order_type))
+                raise ValueError(
+                    "Must have price for order type {}".format(self.order_type)
+                )
 
         if self.time_in_force == TimeInForce.GTD:
             if self.expiry_date is None:
-                raise ValueError("Must have expiry date for order type {}".format(self.order_type))
+                raise ValueError(
+                    "Must have expiry date for order type {}".format(self.order_type)
+                )
 
         if self.order_type in [OrderType.STOP, OrderType.STOP_LIMIT]:
             if self.stop_price is None:
-                raise ValueError("Must have stop price for order type {}".format(self.order_type))
+                raise ValueError(
+                    "Must have stop price for order type {}".format(self.order_type)
+                )
 
         if self.time_in_force == TimeInForce.IOC:
             if self.minimum_quantity is None:
                 raise ValueError(
-                    "Must have minimum quantity for order type {}".format(self.order_type)
+                    "Must have minimum quantity for order type {}".format(
+                        self.order_type
+                    )
                 )
 
         if self.action == OrderAction.CANCEL_ORDER:
