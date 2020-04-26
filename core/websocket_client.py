@@ -338,15 +338,26 @@ class BcexClient(object):
 
     def _on_price_updates(self, msg):
         """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
-        key = msg["symbol"]
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"{key} candles subscribed to.")
+            logging.info(f"{msg['symbol']} candles subscribed to.")
         elif msg["event"] == Event.UPDATED:
+            key = msg["symbol"]
             # TODO: what else would be inside the msg?
             if "price" in msg:
                 candles = self.candles[key]
                 self.candles[key] = _update_max_list(
                     candles, msg["price"], self.MAX_CANDLES_LEN
+                )
+        elif msg["event"] == Event.REJECTED:
+            logging.warning(f"Price update rejected. Reason : {msg['text']}")
+        else:
+            if msg["event"] in Event.ALL:
+                logging.warning(
+                    f"Price updates messages with event {msg['event']} not supported by client"
+                )
+            else:
+                logging.error(
+                    f"Websocket returned a price update message with an unknown event {msg['event']}"
                 )
 
     def _on_ticker_updates(self, msg):
