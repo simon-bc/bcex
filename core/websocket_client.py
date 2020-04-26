@@ -132,6 +132,7 @@ class BcexClient(object):
                 f"Environment {env} does not have associated ws, api and origin urls"
             )
 
+        self._error = None
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
@@ -224,7 +225,11 @@ class BcexClient(object):
 
         # Wait for connection before continuing
         conn_timeout = 5
-        while not self.ws.sock or not self.ws.sock.connected and conn_timeout:
+        while (
+            (not self.ws.sock or not self.ws.sock.connected)
+            and conn_timeout
+            and not self.error
+        ):
             time.sleep(1)
             conn_timeout -= 1
 
@@ -247,8 +252,17 @@ class BcexClient(object):
         """
         logging.warning("\n-- Websocket Closed --")
 
-    def on_error(self, e, data=None):
-        logging.error("{} - data: {}".format(e, data))
+    def on_error(self, error):
+        self.error(error)
+
+    def error(self, err):
+        self._error = err
+        logging.error(err)
+        self.exit()
+
+    def exit(self):
+        self.exited = True
+        self.ws.close()
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
