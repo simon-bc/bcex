@@ -70,8 +70,6 @@ class Order:
         self.check_valid_order()
         self.post_only = post_only
 
-
-
     def __str__(self):
         return f"{self.order_id} - {self.side} {self.order_quantity}@{self.price} {self.instrument}"
 

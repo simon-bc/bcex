@@ -502,7 +502,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     bcex_client = BcexClient(
         symbols=["BTC-USD", "ETH-BTC"],
-        channels=["prices", "l2"],
+        channels=["prices", "l2", "symbols"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
 

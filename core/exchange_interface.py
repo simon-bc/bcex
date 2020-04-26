@@ -21,7 +21,6 @@ class ExchangeInterface:
         # TODO: ensure that we are connected before moving forward
         self.ws.connect()
 
-
     @staticmethod
     def _scale_quantity(instr_details, quantity):
         quantity = round(quantity, instr_details["base_currency_scale"])
@@ -73,6 +72,14 @@ class ExchangeInterface:
             f"Not enough available balance {available_balance} in {currency} for trade quantity {quantity}"
         )
         return False
+
+    def tick_size(self, symbol):
+        details = self.ws.symbol_details[symbol]
+        return details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
+
+    def lot_size(self, symbol):
+        details = self.ws.symbol_details[symbol]
+        return details["min_order_size"] / 10 ** details["min_order_size_scale"]
 
     def _create_order(
         self,
