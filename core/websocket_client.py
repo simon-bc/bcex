@@ -362,11 +362,11 @@ class BcexClient(object):
                     else:
                         self.l2_book[symbol][book][price] = size
 
+
         logging.info(
             f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
             f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
         )
-
 
     def _on_l3_updates(self, msg):
         logging.info(msg)

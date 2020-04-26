@@ -18,7 +18,9 @@ class ExchangeInterface:
         self.ws = BcexClient(instruments, channels=channels, api_key=api_key, env=env)
 
     def connect(self):
+        # TODO: ensure that we are connected before moving forward
         self.ws.connect()
+
 
     @staticmethod
     def _scale_quantity(instr_details, quantity):
@@ -152,7 +154,6 @@ class ExchangeInterface:
 
     def cancel_all_orders(self):
         self.ws.cancel_all_orders()
-
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
     def cancel_order(self, order_id):
