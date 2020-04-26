@@ -1,6 +1,8 @@
 Blockchain.com Exchange python client
 =====================================
 
+This is a sample python client to connect to the [Blockchain.com Exchange](https://exchange.blockchain.com). In order to use this you will need to create an account on the exchange and generate an [API secret](https://exchange.blockchain.com/settings/api). You can then either pass the API key to the client or you can store it as an enviroment variable BCEX_API_KEY. The best starting place is to look at some of the [examples](https://github.com/simon-bc/bcex/tree/master/examples)
+
 Code formatting
 ---------------
 
