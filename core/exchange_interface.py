@@ -18,7 +18,12 @@ class ExchangeInterface:
         self.ws = BcexClient(symbols, channels=channels, api_secret=api_secret, env=env)
 
     def connect(self):
+        # TODO: ensure that we are connected before moving forward
         self.ws.connect()
+
+    def is_open(self):
+        """Check that websockets are still open."""
+        return not self.ws.exited
 
     @staticmethod
     def _scale_quantity(symbol_details, quantity):
@@ -71,6 +76,14 @@ class ExchangeInterface:
             f"Not enough available balance {available_balance} in {currency} for trade quantity {quantity}"
         )
         return False
+
+    def tick_size(self, symbol):
+        details = self.ws.symbol_details[symbol]
+        return details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
+
+    def lot_size(self, symbol):
+        details = self.ws.symbol_details[symbol]
+        return details["min_order_size"] / 10 ** details["min_order_size_scale"]
 
     def _create_order(
         self,
@@ -152,7 +165,6 @@ class ExchangeInterface:
 
     def cancel_all_orders(self):
         self.ws.cancel_all_orders()
-
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
     def cancel_order(self, order_id):

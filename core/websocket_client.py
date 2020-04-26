@@ -135,6 +135,7 @@ class BcexClient(object):
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
+        self.exited = False
 
         self.symbols = symbols
         self.symbol_details = {s: {} for s in symbols}
@@ -202,6 +203,9 @@ class BcexClient(object):
     def _private_subscription(self):
         self._authenticate()
         for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
+            if channel == Channel.AUTH:
+                # already subscribed
+                continue
             self.ws.send(json.dumps({"action": "subscribe", "channel": channel}))
 
     def connect(self):
@@ -275,7 +279,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
-        logging.info(msg)
+        logging.debug(msg)
         # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
@@ -531,7 +535,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     bcex_client = BcexClient(
         symbols=["BTC-USD", "ETH-BTC"],
-        channels=["prices", "l2"],
+        channels=["prices", "l2", "symbols"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
     )
