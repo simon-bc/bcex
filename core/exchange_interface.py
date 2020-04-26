@@ -14,12 +14,24 @@ class ExchangeInterface:
         api_secret=None,
         env=Environment.STAGING,
         channels=REQUIRED_CHANNELS,
+        close_position_on_exit=True,
     ):
-        self.ws = BcexClient(symbols, channels=channels, api_secret=api_secret, env=env)
+        self.ws = BcexClient(
+            symbols,
+            channels=channels,
+            api_secret=api_secret,
+            env=env,
+            close_position_on_exit=close_position_on_exit,
+        )
 
     def connect(self):
+        """Connects to the Blockchain Exchange We"""
         # TODO: ensure that we are connected before moving forward
         self.ws.connect()
+
+    def exit(self):
+        """Closes Websocket"""
+        self.ws.exit()
 
     def is_open(self):
         """Check that websockets are still open."""
@@ -27,11 +39,39 @@ class ExchangeInterface:
 
     @staticmethod
     def _scale_quantity(symbol_details, quantity):
+        """Scales the quantity for an order to the given scale
+
+        Parameters
+        ----------
+        symbol_details : dict
+            dictionary of details from the symbols from the symbols channel
+        quantity : float
+            quantity of order
+
+        Returns
+        -------
+        quantity : float
+            quantity of order scaled to required level
+        """
         quantity = round(quantity, symbol_details["base_currency_scale"])
         return quantity
 
     @staticmethod
     def _scale_price(symbol_details, price):
+        """Scales the price for an order to the given scale
+
+        Parameters
+        ----------
+        symbol_details : dict
+            dictionary of details from the symbols from the symbols channel
+        price : float
+            price of order
+
+        Returns
+        -------
+        price : float
+            price of order scaled to required level
+        """
         price_multiple = (
             price * 10 ** symbol_details["min_price_increment_scale"]
         ) / symbol_details["min_price_increment"]
@@ -44,6 +84,19 @@ class ExchangeInterface:
 
     @staticmethod
     def _check_quantity_within_limits(symbol_details, quantity):
+        """Checks if the quantity for the order is acceptable for the given symbol
+
+        Parameters
+        ----------
+        symbol_details : dict
+            dictionary of details from the symbols from the symbols channel
+        quantity : float
+            quantity of order
+
+        Returns
+        -------
+        result : bool
+        """
         max_limit = symbol_details["max_order_size"] / (
             10 ** symbol_details["max_order_size_scale"]
         )
@@ -61,6 +114,22 @@ class ExchangeInterface:
         return True
 
     def _check_available_balance(self, symbol_details, side, quantity, price):
+        """Checks if the quantity requested is possible with given balance
+
+        Parameters
+        ----------
+        symbol_details : dict
+            dictionary of details from the symbols from the symbols channel
+        side : OrderSide enum
+        quantity : float
+            quantity of order
+        price : float
+            price of order
+
+        Returns
+        -------
+        result : bool
+        """
         if side == OrderSide.BUY:
             currency = symbol_details["base_currency"]
             quantity_in_currency = quantity
@@ -78,10 +147,32 @@ class ExchangeInterface:
         return False
 
     def tick_size(self, symbol):
+        """Gets the tick size for given symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        tick_size : float
+        """
         details = self.ws.symbol_details[symbol]
-        return details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
+        return (
+            details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
+        )
 
     def lot_size(self, symbol):
+        """Gets the lot size for given symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        lot_size : float
+        """
         details = self.ws.symbol_details[symbol]
         return details["min_order_size"] / 10 ** details["min_order_size_scale"]
 
@@ -98,6 +189,33 @@ class ExchangeInterface:
         stop_price,
         check_balance=False,
     ):
+        """Creates orders in correct format
+
+        Parameters
+        ----------
+        symbol : Symbol
+        side : OrderSide enum
+        quantity : float
+            quantity of order
+        price : float
+            price of order
+        order_type : OrderType
+        time_in_force : TimeInForce
+            Time in force, applicable for orders except market orders
+        minimum_quantity : float
+            The minimum quantity required for an TimeInForce.IOC fill
+        expiry_date : int YYYYMMDD
+            Expiry date required for GTD orders
+        stop_price : float
+            Price to trigger the stop order
+        check_balance : bool
+            check if balance is sufficient for order
+
+        Returns
+        -------
+        order : Order
+            order
+        """
         # assumes websocket has subscribed to symbol details of this symbol
         symbol_details = self.ws.symbol_details[symbol]
         quantity = self._scale_quantity(symbol_details, quantity)
@@ -142,10 +260,23 @@ class ExchangeInterface:
 
         Parameters
         ----------
-        symbol : str
+        symbol : Symbol
         side : OrderSide enum
-        price : float
         quantity : float
+            quantity of order
+        price : float
+            price of order
+        order_type : OrderType
+        time_in_force : TimeInForce
+            Time in force, applicable for orders except market orders
+        minimum_quantity : float
+            The minimum quantity required for an TimeInForce.IOC fill
+        expiry_date : int YYYYMMDD
+            Expiry date required for GTD orders
+        stop_price : float
+            Price to trigger the stop order
+        check_balance : bool
+            check if balance is sufficient for order
 
         """
         order = self._create_order(
@@ -164,31 +295,99 @@ class ExchangeInterface:
             self.ws.send_order(order)
 
     def cancel_all_orders(self):
+        """Cancel all orders"""
         self.ws.cancel_all_orders()
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
     def cancel_order(self, order_id):
-        self.ws.send_order(Order(OrderType.CANCEL, order_id=order_id))
+        """Cancel specific order
+
+        Parameters
+        ----------
+        order_id : str
+            order id to cancel
+
+        """
+        self.ws.send_order(
+            Order(
+                OrderType.CANCEL,
+                order_id=order_id,
+                symbol=self.get_order_details(order_id).symbol,
+            )
+        )
 
     def cancel_orders_for_symbol(self, symbol):
+        """Cancel all orders for symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        """
         order_ids = self.ws.open_orders[symbol].keys()
         for o in order_ids:
             self.cancel_order(o)
 
     def get_last_traded_price(self, symbol):
+        """Get the last matched price for the given symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        last_traded_price : float
+            last matched price for symbol
+        """
         return self.ws.tickers.get(symbol)
 
-    def get_ask_price(self, instrument):
+    def get_ask_price(self, symbol):
+        """Get the ask price for the given symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        ask_price : float
+            ask price for symbol
+        """
         # sorted dict - first key is lowest price
-        book = self.ws.l2_book[instrument][Book.ASK]
+        book = self.ws.l2_book[symbol][Book.ASK]
         return book.peekitem(0) if len(book) > 0 else None
 
-    def get_bid_price(self, instrument):
+    def get_bid_price(self, symbol):
+        """Get the bid price for the given symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        bid_price : float
+            bid price for symbol
+        """
         # sorted dict - last key is highest price
-        book = self.ws.l2_book[instrument][Book.BID]
+        book = self.ws.l2_book[symbol][Book.BID]
         return book.peekitem(-1) if len(book) > 0 else None
 
     def get_all_open_orders(self, symbols=None, to_dict=False):
+        """Gets all the open orders
+
+        Parameters
+        ----------
+        symbols : Symbol
+        to_dict : bool
+            convert the OrderResponses to a dict
+
+        Returns
+        -------
+        open_orders : dict
+            dict of all the open orders, key is the order id and values are order details
+        """
         open_orders = {}
         if symbols is None:
             symbols = self.ws.open_orders.keys()
@@ -199,7 +398,23 @@ class ExchangeInterface:
         else:
             return open_orders
 
-    def get_order_details(self, order_id, symbol=None, to_dict=True):
+    def get_order_details(self, order_id, symbol=None, to_dict=False):
+        """Get order details for a specific order
+
+        Parameters
+        ----------
+        order_id : str
+            order id for requested order
+        symbol : Symbol
+            if none have to search all symbols until it is found
+        to_dict : bool
+            convert the OrderResponses to a dict
+
+        Returns
+        -------
+        order_details : OrderResponse or dict
+            details for specific order type depends on the to dict value
+        """
         if symbol:
             order = self.ws.open_orders[symbol].get(order_id)
             if order is None:
@@ -219,8 +434,9 @@ class ExchangeInterface:
         return None
 
     def get_balance(self):
+        """Get user balances"""
         return self.ws.balances
 
     def get_symbols(self):
+        """Get all the symbols"""
         return self.ws.symbols
-

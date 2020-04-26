@@ -98,6 +98,7 @@ class BcexClient(object):
         channel_kwargs=None,
         env=Environment.STAGING,
         api_secret=None,
+        close_position_on_exit=True,
     ):
         """This class connects to the PIT websocket client
 
@@ -119,6 +120,8 @@ class BcexClient(object):
         api_secret : str
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
             if not provided, the api key will be taken from environment variable BCEX_API_SECRET
+        close_position_on_exit: bool
+            sends cancel all trades order on exit
         """
         if env == Environment.STAGING:
             ws_url = "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
@@ -131,11 +134,11 @@ class BcexClient(object):
                 f"Environment {env} does not have associated ws, api and origin urls"
             )
 
+        self.close_position_on_exit = close_position_on_exit
         self._error = None
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
-        self.exited = False
 
         self.symbols = symbols
         self.symbol_details = {s: {} for s in symbols}
@@ -203,9 +206,6 @@ class BcexClient(object):
     def _private_subscription(self):
         self._authenticate()
         for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
-            if channel == Channel.AUTH:
-                # already subscribed
-                continue
             self.ws.send(json.dumps({"action": "subscribe", "channel": channel}))
 
     def connect(self):
@@ -221,7 +221,7 @@ class BcexClient(object):
             on_ping=None,
         )
         self.wst = threading.Thread(
-            target=lambda: self.ws.run_forever(origin=self.origin)
+            target=lambda: self.ws.run_forever(origin=self.origin,)
         )
         self.wst.daemon = True
         self.wst.start()
@@ -253,6 +253,7 @@ class BcexClient(object):
     def on_close(self):
         """What to do when the websocket closes
         """
+        self.exit()
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
@@ -264,6 +265,8 @@ class BcexClient(object):
         self.exit()
 
     def exit(self):
+        if self.close_position_on_exit:
+            self.cancel_all_orders()
         self.ws.close()
         self.exited = True
 
@@ -279,7 +282,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
-        logging.debug(msg)
+        logging.info(msg)
         # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
@@ -535,7 +538,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     bcex_client = BcexClient(
         symbols=["BTC-USD", "ETH-BTC"],
-        channels=["prices", "l2", "symbols"],
+        channels=["prices", "l2"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
     )
