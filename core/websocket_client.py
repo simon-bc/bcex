@@ -228,7 +228,7 @@ class BcexClient(object):
         while (
             (not self.ws.sock or not self.ws.sock.connected)
             and conn_timeout
-            and not self.error
+            and not self._error
         ):
             time.sleep(1)
             conn_timeout -= 1
@@ -261,8 +261,8 @@ class BcexClient(object):
         self.exit()
 
     def exit(self):
-        self.exited = True
         self.ws.close()
+        self.exited = True
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
