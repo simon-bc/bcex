@@ -8,6 +8,14 @@ from core.websocket_client import BcexClient, Book, Channel, Environment
 
 
 class ExchangeInterface:
+    """Interface for the Bcex Exchange
+
+    Attributes
+    ----------
+    ws: BcexClient
+        websocket client to handle interactions with the exchange
+    """
+
     REQUIRED_CHANNELS = [Channel.SYMBOLS, Channel.TICKER, Channel.TRADES]
 
     def __init__(
@@ -15,9 +23,30 @@ class ExchangeInterface:
         symbols,
         api_secret=None,
         env=Environment.STAGING,
-        channels=REQUIRED_CHANNELS,
+        channels=None,
         cancel_position_on_exit=True,
     ):
+        """
+        Parameters
+        ----------
+        symbols : list of str
+            if multiple symbols then a list if a single symbol then a string or list.
+            Symbols that you want the client to subscribe to
+        channels : list of Channel,
+            channels to subscribe to. if not provided all channels will be subscribed to.
+            Some Public channels are symbols specific and will subscribe to provided symbols
+        env : Environment
+            environment to run in
+            api key on exchange.blockchain.com gives access to Production environment
+            To obtain access to staging environment, request to our support center needs to be made
+        api_secret : str
+            api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
+            if not provided, the api key will be taken from environment variable BCEX_API_SECRET
+        """
+        if channels is not None:
+            # make sure we include the required channels
+            channels = list(set(self.REQUIRED_CHANNELS + channels))
+
         self.ws = BcexClient(
             symbols,
             channels=channels,
@@ -140,7 +169,7 @@ class ExchangeInterface:
         else:
             currency = symbol_details["counter_currency"]
             quantity_in_currency = quantity * price
-        balances = self.get_balance()
+        balances = self.get_balances()
         available_balance = balances[currency]["available"]
         if available_balance > quantity_in_currency:
             return True
@@ -258,9 +287,11 @@ class ExchangeInterface:
         stop_price=None,
         check_balance=False,
     ):
-        """
-        Use the information from the symbols table to ensure our price and quantity conform to the
-        exchange requirements
+        """Place order with valid quantity and prices
+
+        It uses information from the symbols table to ensure our price and quantity conform to the exchange requirements
+        If necessary, prices and quantities will be rounded to make it a valid order.
+
 
         Parameters
         ----------
@@ -299,7 +330,12 @@ class ExchangeInterface:
             self.ws.send_order(order)
 
     def cancel_all_orders(self):
-        """Cancel all orders"""
+        """Cancel all orders
+
+        Notes
+        -----
+        This also cancels the orders for symbols which are not in self.symbols
+        """
         self.ws.cancel_all_orders()
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
@@ -402,7 +438,7 @@ class ExchangeInterface:
         else:
             return open_orders
 
-    def get_order_details(self, order_id, symbol=None, to_dict=False):
+    def get_order_details(self, order_id, symbol=None):
         """Get order details for a specific order
 
         Parameters
@@ -411,33 +447,33 @@ class ExchangeInterface:
             order id for requested order
         symbol : Symbol
             if none have to search all symbols until it is found
-        to_dict : bool
-            convert the OrderResponses to a dict
 
         Returns
         -------
-        order_details : OrderResponse or dict
+        order_details : OrderResponse
             details for specific order type depends on the to dict value
         """
-        if symbol:
-            order = self.ws.open_orders[symbol].get(order_id)
-            if order is None:
-                return order
-            if to_dict:
-                return order.to_dict()
-            else:
-                return order
-        symbols = self.ws.open_orders.keys()
+        if symbol is not None:
+            symbols = [symbol]
+        else:
+            symbols = self.ws.open_orders.keys()
+
         for i in symbols:
             order_details = self.ws.open_orders[i].get(order_id)
-            if order_details:
-                if to_dict:
-                    return order_details.to_dict()
-                else:
-                    return order_details
+            if order_details is not None:
+                return order_details
+
         return None
 
-    def get_balance(self):
+    def get_available_balance(self, coin):
+        """
+        Returns
+        -------
+        float: the available balance of the coin
+        """
+        return self.ws.balances.get(coin, {}).get("available", 0)
+
+    def get_balances(self):
         """Get user balances"""
         return self.ws.balances
 
