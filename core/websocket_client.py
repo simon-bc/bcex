@@ -275,6 +275,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
+        logging.info(msg)
         # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
@@ -340,6 +341,7 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             key = msg["symbol"]
             logging.info(f"{key} candles subscribed to.")
+            logging.info(f"{msg['symbol']} candles subscribed to.")
         elif msg["event"] == Event.UPDATED:
             key = msg["symbol"]
             # TODO: what else would be inside the msg?
@@ -347,6 +349,17 @@ class BcexClient(object):
                 candles = self.candles[key]
                 self.candles[key] = _update_max_list(
                     candles, msg["price"], self.MAX_CANDLES_LEN
+                )
+        elif msg["event"] == Event.REJECTED:
+            logging.warning(f"Price update rejected. Reason : {msg['text']}")
+        else:
+            if msg["event"] in Event.ALL:
+                logging.warning(
+                    f"Price updates messages with event {msg['event']} not supported by client"
+                )
+            else:
+                logging.error(
+                    f"Websocket returned a price update message with an unknown event {msg['event']}"
                 )
 
     def _on_ticker_updates(self, msg):
@@ -357,25 +370,28 @@ class BcexClient(object):
 
     def _on_l2_updates(self, msg):
         symbol = msg["symbol"]
+
         if msg["event"] == Event.SNAPSHOT:
+            # We should clear existing levels
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
 
         if msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
             for book in [Book.BID, Book.ASK]:
                 updates = msg[book]
                 for data in updates:
+
                     price = data["px"]
                     size = data["qty"]
-                    if size == 0:
+                    if size == 0.0:
                         logging.info(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
+                    else:
+                        self.l2_book[symbol][book][price] = size
 
-                    self.l2_book[symbol][book][price] = size
-
-        logging.info(
-            f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
-            f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
-        )
+        if len(self.l2_book[symbol][Book.ASK]) > 0:
+            logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
+        if len(self.l2_book[symbol][Book.BID]) > 0:
+            logging.info(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
 
     def _on_l3_updates(self, msg):
         logging.info(msg)
@@ -456,7 +472,7 @@ class BcexClient(object):
         order : Order
             the order you want to send
         """
-        if order.symbol not in self.symbols:
+        if order.symbol not in self.symbols and order.order_id != -999:
             logging.error(
                 f"[{order}] Sending orders for an symbol without subscribing to the market is not safe."
                 f" You should subscribe first to symbol {order.symbol}"

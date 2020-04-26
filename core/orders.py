@@ -30,6 +30,7 @@ class TimeInForce:
 class OrderAction:
     CANCEL_ORDER = "CancelOrderRequest"
     PLACE_ORDER = "NewOrderSingle"
+    BULK_CANCEL = "BulkCancelOrderRequest"
 
 
 class Order:
@@ -57,12 +58,16 @@ class Order:
         self.stop_price = stop_price
         self.minimum_quantity = minimum_quantity
         self.client_order_id = str(uuid.uuid1())[:10] + "_bcexpy"
-        self.action = (
-            OrderAction.CANCEL_ORDER
-            if self.order_type == OrderType.CANCEL
-            else OrderAction.PLACE_ORDER
-        )
+
         self.order_id = order_id
+        if self.order_type == OrderType.CANCEL:
+            if self.order_id == -999:
+                self.action = OrderAction.BULK_CANCEL
+            else:
+                self.action = OrderAction.CANCEL_ORDER
+        else:
+            self.action = OrderAction.PLACE_ORDER
+
         self.check_valid_order()
         self.post_only = post_only
 
@@ -124,6 +129,12 @@ class Order:
                 "action": "CancelOrderRequest",
                 "channel": "trading",
                 "orderID": self.order_id,
+            }
+        elif self.action == OrderAction.BULK_CANCEL:
+            res = {
+                "action": "BulkCancelOrderRequest",
+                "channel": "trading",
+                "orderID": -999,
             }
         elif self.action == OrderAction.PLACE_ORDER:
             res = {

@@ -172,7 +172,7 @@ class ExchangeInterface:
     def get_bid_price(self, symbol):
         return self.ws.l2_book[symbol][Book.ASK].peekitem(0)
 
-    def get_all_open_orders(self, symbols=None, to_dict=True):
+    def get_all_open_orders(self, symbols=None, to_dict=False):
         open_orders = {}
         if symbols is None:
             symbols = self.ws.open_orders.keys()
