@@ -34,7 +34,6 @@ class ExchangeInterface:
             Symbols that you want the client to subscribe to
         channels : list of Channel,
             channels to subscribe to. if not provided all channels will be subscribed to.
-            Private channels will be subscribed to only if an API key is provided
             Some Public channels are symbols specific and will subscribe to provided symbols
         env : Environment
             environment to run in
@@ -44,8 +43,10 @@ class ExchangeInterface:
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
             if not provided, the api key will be taken from environment variable BCEX_API_SECRET
         """
-        if channels is None:
-            channels = self.REQUIRED_CHANNELS
+        if channels is not None:
+            # make sure we include the required channels
+            channels = list(set(self.REQUIRED_CHANNELS + channels))
+
         self.ws = BcexClient(
             symbols,
             channels=channels,
