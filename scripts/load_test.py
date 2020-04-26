@@ -38,9 +38,6 @@ def main():
         except WebSocketConnectionClosedException as e:
             logging.error(f"Attempt Number {attempt_number} errored with {e}")
             attempt_number += 1
-        except KeyboardInterrupt:
-            ex_interface.exit()
-            raise KeyboardInterrupt
         except Exception as e:
             raise e
 

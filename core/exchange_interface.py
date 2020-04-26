@@ -1,5 +1,7 @@
+import atexit
 import logging
 import math
+import signal
 
 from core.orders import Order, OrderSide, OrderType, TimeInForce
 from core.websocket_client import BcexClient, Book, Channel, Environment
@@ -23,6 +25,8 @@ class ExchangeInterface:
             env=env,
             cancel_position_on_exit=cancel_position_on_exit,
         )
+        atexit.register(self.exit)
+        signal.signal(signal.SIGTERM, self.exit)
 
     def connect(self):
         """Connects to the Blockchain Exchange Websocket"""
