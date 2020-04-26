@@ -135,6 +135,7 @@ class BcexClient(object):
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
+        self.exited = False
 
         self.symbols = symbols
         self.symbol_details = {s: {} for s in symbols}
@@ -202,6 +203,9 @@ class BcexClient(object):
     def _private_subscription(self):
         self._authenticate()
         for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
+            if channel == Channel.AUTH:
+                # already subscribed
+                continue
             self.ws.send(json.dumps({"action": "subscribe", "channel": channel}))
 
     def connect(self):

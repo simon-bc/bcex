@@ -21,6 +21,10 @@ class ExchangeInterface:
         # TODO: ensure that we are connected before moving forward
         self.ws.connect()
 
+    def is_open(self):
+        """Check that websockets are still open."""
+        return not self.ws.exited
+
     @staticmethod
     def _scale_quantity(symbol_details, quantity):
         quantity = round(quantity, symbol_details["base_currency_scale"])

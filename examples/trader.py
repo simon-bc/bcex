@@ -15,7 +15,6 @@ class BaseTrader:
         self.exchange = ExchangeInterface([symbol], api_secret=api_key, env=env,
                                           channels=self.CHANNELS)
         self.exchange.connect()
-        time.sleep(5)
         self._symbol = symbol
         self._refresh_rate = refresh_rate
 
@@ -44,9 +43,9 @@ class BaseTrader:
 
     def run_loop(self):
         while True:
-            # if not self.exchange.is_open():
-            #     logging.error("Websocket has disconnected. Attempting to restart")
-            #     self.restart()
+            if not self.exchange.is_open():
+                logging.error("Websocket has disconnected. Attempting to restart")
+                self.restart()
 
             self.handle_orders()
 
@@ -161,7 +160,7 @@ class BasicLadderQuotes(BaseTrader):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    trader = BasicLadderQuotes("ETH-BTC", 5, 3, refresh_rate=10)
+    logging.basicConfig(level=logging.DEBUG)
+    trader = BasicLadderQuotes("ETH-BTC", 5, 3, refresh_rate=5)
 
     trader.run_loop()
