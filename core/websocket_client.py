@@ -369,7 +369,7 @@ class BcexClient(object):
     def _on_l2_updates(self, msg):
         symbol = msg["symbol"]
 
-        if msg["event"]  == Event.SNAPSHOT:
+        if msg["event"] == Event.SNAPSHOT:
             # We should clear existing levels
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
 
@@ -378,19 +378,18 @@ class BcexClient(object):
                 updates = msg[book]
                 for data in updates:
 
-                    price = data['px']
-                    size = data['qty']
+                    price = data["px"]
+                    size = data["qty"]
                     if size == 0.0:
                         logging.info(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
                     else:
                         self.l2_book[symbol][book][price] = size
 
-        logging.info(
-            f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
-            f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
-        )
-
+        if len(self.l2_book[symbol][Book.ASK]) > 0:
+            logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
+        if len(self.l2_book[symbol][Book.BID]) > 0:
+            logging.info(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
 
     def _on_l3_updates(self, msg):
         logging.info(msg)
@@ -529,7 +528,6 @@ if __name__ == "__main__":
         channels=["prices", "l2"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
-
     )
 
     bcex_client.connect()
