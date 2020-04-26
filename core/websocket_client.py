@@ -253,9 +253,9 @@ class BcexClient(object):
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
-        self.error(error)
+        self._on_error(error)
 
-    def error(self, err):
+    def _on_error(self, err):
         self._error = err
         logging.error(err)
         self.exit()
