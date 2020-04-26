@@ -25,7 +25,7 @@ class ExchangeInterface:
         )
 
     def connect(self):
-        """Connects to the Blockchain Exchange We"""
+        """Connects to the Blockchain Exchange Websocket"""
         # TODO: ensure that we are connected before moving forward
         self.ws.connect()
 
