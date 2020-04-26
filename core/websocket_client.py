@@ -3,15 +3,14 @@ import logging
 import os
 import threading
 import time
-from decimal import Decimal
-
 from collections import defaultdict
-from sortedcontainers import SortedDict as sd
+
 import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
 from core.utils import parse_balance
+from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
 
@@ -132,6 +131,7 @@ class BcexClient(object):
                 f"Environment {env} does not have associated ws, api and origin urls"
             )
 
+        self._error = None
         self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
@@ -224,7 +224,11 @@ class BcexClient(object):
 
         # Wait for connection before continuing
         conn_timeout = 5
-        while not self.ws.sock or not self.ws.sock.connected and conn_timeout:
+        while (
+            (not self.ws.sock or not self.ws.sock.connected)
+            and conn_timeout
+            and not self._error
+        ):
             time.sleep(1)
             conn_timeout -= 1
 
@@ -247,8 +251,17 @@ class BcexClient(object):
         """
         logging.warning("\n-- Websocket Closed --")
 
-    def on_error(self, e, data=None):
-        logging.error("{} - data: {}".format(e, data))
+    def on_error(self, error):
+        self._on_error(error)
+
+    def _on_error(self, err):
+        self._error = err
+        logging.error(err)
+        self.exit()
+
+    def exit(self):
+        self.ws.close()
+        self.exited = True
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
@@ -484,10 +497,10 @@ class BcexClient(object):
 
     def _wait_for_authentication(self):
         """Waits until we have received message confirming authentication"""
-        timeout = 5
+        timeout = 50
         while not self.authenticated and timeout:
             time.sleep(0.1)
-            timeout -= 0.1
+            timeout -= 1
 
         if not timeout:
             logging.error("Couldn't authenticate connection! Exiting.")
