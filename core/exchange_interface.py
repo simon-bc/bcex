@@ -168,11 +168,13 @@ class ExchangeInterface:
 
     def get_ask_price(self, instrument):
         # sorted dict - first key is lowest price
-        return self.ws.l2_book[instrument][Book.ASK].peekitem(0)
+        book = self.ws.l2_book[instrument][Book.ASK]
+        return book.peekitem(0) if len(book) > 0 else None
 
     def get_bid_price(self, instrument):
         # sorted dict - last key is highest price
-        return self.ws.l2_book[instrument][Book.BID].peekitem(-1)
+        book = self.ws.l2_book[instrument][Book.BID]
+        return book.peekitem(-1) if len(book) > 0 else None
 
     def get_all_open_orders(self, instruments=None):
         open_orders = {}
@@ -201,27 +203,3 @@ class ExchangeInterface:
     def get_instruments(self):
         return self.ws.symbols
 
-
-if __name__ == "__main__":
-    price = 9090.20
-
-    ins_details = {
-        "symbol": "BTC-USD",
-        "base_currency": "BTC",
-        "base_currency_scale": 8,
-        "counter_currency": "USD",
-        "counter_currency_scale": 2,
-        "min_price_increment": 10,
-        "min_price_increment_scale": 2,
-        "min_order_size": 60000,
-        "min_order_size_scale": 8,
-    }
-
-    price_multiple = (
-        price * 10 ** ins_details["min_price_increment_scale"]
-    ) / ins_details["min_price_increment"]
-    print(
-        math.floor(price_multiple)
-        * ins_details["min_price_increment"]
-        / 10 ** ins_details["min_price_increment_scale"]
-    )
