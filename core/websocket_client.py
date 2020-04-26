@@ -262,6 +262,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
+        logging.info(msg)
         # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
@@ -343,25 +344,29 @@ class BcexClient(object):
 
     def _on_l2_updates(self, msg):
         symbol = msg["symbol"]
-        if msg["event"] == Event.SNAPSHOT:
+
+        if msg["event"]  == Event.SNAPSHOT:
+            # We should clear existing levels
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
 
         if msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
             for book in [Book.BID, Book.ASK]:
                 updates = msg[book]
                 for data in updates:
-                    price = data["px"]
-                    size = data["qty"]
-                    if size == 0:
+
+                    price = data['px']
+                    size = data['qty']
+                    if size == 0.0:
                         logging.info(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
-
-                    self.l2_book[symbol][book][price] = size
+                    else:
+                        self.l2_book[symbol][book][price] = size
 
         logging.info(
             f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)}  "
             f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}"
         )
+
 
     def _on_l3_updates(self, msg):
         logging.info(msg)
@@ -442,7 +447,7 @@ class BcexClient(object):
         order : Order
             the order you want to send
         """
-        if order.instrument not in self.symbols:
+        if order.instrument not in self.symbols and order.order_id != -999:
             logging.error(
                 f"[{order}] Sending orders for an instrument without subscribing to the market is not safe."
                 f" You should subscribe first to instrument {order.instrument}"
@@ -500,6 +505,7 @@ if __name__ == "__main__":
         channels=["prices", "l2"],
         channel_kwargs={"prices": {"granularity": 60}},
         env=Environment.STAGING,
+
     )
 
     bcex_client.connect()
