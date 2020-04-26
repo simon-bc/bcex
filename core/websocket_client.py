@@ -3,15 +3,14 @@ import logging
 import os
 import threading
 import time
-from decimal import Decimal
-
 from collections import defaultdict
-from sortedcontainers import SortedDict as sd
+
 import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
 from core.utils import parse_balance
+from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
 
@@ -493,10 +492,10 @@ class BcexClient(object):
 
     def _wait_for_authentication(self):
         """Waits until we have received message confirming authentication"""
-        timeout = 5
+        timeout = 50
         while not self.authenticated and timeout:
             time.sleep(0.1)
-            timeout -= 0.1
+            timeout -= 1
 
         if not timeout:
             logging.error("Couldn't authenticate connection! Exiting.")

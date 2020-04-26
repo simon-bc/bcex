@@ -2,7 +2,7 @@ import logging
 
 from core.exchange_interface import ExchangeInterface
 from core.instrument import Instrument
-from core.websocket_client import Channel
+from core.websocket_client import Channel, Environment
 from examples.quote_both_sides import quote_randomly_both_sides_interface
 from websocket import WebSocketConnectionClosedException
 
@@ -28,6 +28,7 @@ def main():
                     Channel.BALANCES,
                     Channel.TRADING,
                 ],
+                env=Environment.STAGING,
             )
 
             sleep_time = 5
