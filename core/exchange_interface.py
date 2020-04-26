@@ -167,10 +167,12 @@ class ExchangeInterface:
         return self.ws.tickers.get(instrument)
 
     def get_ask_price(self, instrument):
+        # sorted dict - first key is lowest price
         return self.ws.l2_book[instrument][Book.ASK].peekitem(0)
 
     def get_bid_price(self, instrument):
-        return self.ws.l2_book[instrument][Book.ASK].peekitem(0)
+        # sorted dict - last key is highest price
+        return self.ws.l2_book[instrument][Book.BID].peekitem(-1)
 
     def get_all_open_orders(self, instruments=None):
         open_orders = {}
