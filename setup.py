@@ -26,7 +26,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/simon-bc/bcex",
-    packages=setuptools.find_packages(exclude=["tests"]),
+    packages=setuptools.find_packages(exclude=["tests", "scripts"]),
     cmdclass={"test": Test},
     install_requires=REQUIRED,
     tests_require=["pytest"],
