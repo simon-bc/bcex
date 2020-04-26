@@ -9,13 +9,12 @@ from core.websocket_client import Environment, Channel
 
 
 class BaseTrader:
-    CHANNELS = Channel.PRIVATE + [Channel.PRICES, Channel.TICKER, Channel.TRADES, Channel.SYMBOLS]
+    CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS]
 
     def __init__(self, symbol, api_key=None, env=Environment.STAGING, refresh_rate=5):
         self.exchange = ExchangeInterface([symbol], api_key=api_key, env=env,
                                           channels=self.CHANNELS)
         self.exchange.connect()
-        time.sleep(10)
         self._symbol = symbol
         self._refresh_rate = refresh_rate
 
