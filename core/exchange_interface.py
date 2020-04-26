@@ -1,8 +1,8 @@
-import math
 import logging
+import math
 
-from core.orders import Order, OrderType, OrderSide, TimeInForce
-from core.websocket_client import BcexClient, Environment, Channel, Book
+from core.orders import Order, OrderSide, OrderType, TimeInForce
+from core.websocket_client import BcexClient, Book, Channel, Environment
 
 
 class ExchangeInterface:
@@ -178,7 +178,7 @@ class ExchangeInterface:
             instruments = self.ws.open_orders.keys()
         for i in instruments:
             open_orders.update(self.ws.open_orders[i])
-        return {k: o.to_dict() for k, o in open_orders.items()}
+        return open_orders
 
     def get_order_details(self, order_id, instrument=None):
         if instrument:
