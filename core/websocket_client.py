@@ -105,7 +105,7 @@ class BcexClient(object):
             if multiple symbols then a list if a single symbol then a string or list.
             Symbols that you want the client to subscribe to
         channels : list of Channel,
-            channels to subscribe to. if not provided all channels will be subscribed to.
+            channels to subscribe to. if not provided all channels apart from L3 will be subscribed to.
             Private channels will be subscribed to only if an API key is provided
             Some Public channels are symbols specific and will subscribe to provided symbols
         channel_kwargs: dict
@@ -140,7 +140,9 @@ class BcexClient(object):
 
         self.symbols = symbols
         self.symbol_details = {s: {} for s in symbols}
-        self.channels = channels or Channel.ALL
+        self.channels = channels or list(
+            set(Channel.ALL) - {Channel.L3}
+        )  # L3 not handled yet
         self.channel_kwargs = channel_kwargs or {}
 
         # webs.enableTrace(True)
