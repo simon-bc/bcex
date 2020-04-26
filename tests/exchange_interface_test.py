@@ -1,11 +1,10 @@
 from collections import defaultdict
 
-from core.orders import OrderSide
-from customers_analytics.mercury.mercury_db_utils import Instrument
-from sortedcontainers import SortedDict as sd
-
 from core.exchange_interface import ExchangeInterface
-from core.websocket_client import Environment, Channel
+from core.instrument import Instrument
+from core.orders import OrderSide
+from core.websocket_client import Channel, Environment
+from sortedcontainers import SortedDict as sd
 
 
 class MockWebsocketClient:

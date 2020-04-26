@@ -2,11 +2,10 @@ import logging
 import random
 import time
 
+from core.instrument import Instrument
 from core.exchange_interface import ExchangeInterface
 from core.order_response import OrderStatus
 from core.orders import Order, OrderSide, OrderType, TimeInForce
-
-from customers_analytics.mercury.mercury_db_utils import Instrument
 
 ORDER_QUANTITY_MAP = {Instrument.ETHBTC: 0.024, Instrument.BTCUSD: 0.001}
 
