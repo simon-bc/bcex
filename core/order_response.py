@@ -49,7 +49,7 @@ class OrderResponse:
         self.order_id = dict_response.get("orderID")
         self.execution_id = dict_response.get("execID")
 
-        self.instrument = dict_response.get("symbol")
+        self.symbol = dict_response.get("symbol")
 
         self.price = dict_response.get("price")
         self.average_price = dict_response.get("avgPx")
@@ -65,7 +65,7 @@ class OrderResponse:
             "order_id",
             "execution_id",
             "order_status",
-            "instrument",
+            "symbol",
         ]:
             msg_str += f"{attr}: {getattr(self, attr)}, "
 
@@ -81,7 +81,8 @@ class OrderResponse:
                 "order_status",
                 "price",
                 "order_type",
-                "order_side" "instrument",
+                "order_side",
+                "symbol",
                 "order_quantity",
                 "matched_quantity",
                 "left_quantity",

@@ -97,7 +97,7 @@ class BcexClient(object):
         channels=None,
         channel_kwargs=None,
         env=Environment.STAGING,
-        api_key=None,
+        api_secret=None,
     ):
         """This class connects to the PIT websocket client
 
@@ -116,9 +116,9 @@ class BcexClient(object):
             environment to run in
             api key on exchange.blockchain.com gives access to Production environment
             To obtain access to staging environment, request to our support center needs to be made
-        api_key : str
+        api_secret : str
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
-            if not provided, the api key will be taken from environment variable MERCURY_API_KEY
+            if not provided, the api key will be taken from environment variable BCEX_API_SECRET
         """
         if env == Environment.STAGING:
             ws_url = "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
@@ -145,10 +145,10 @@ class BcexClient(object):
         self.ws = None
         self.wst = None
 
-        self._api_key = api_key
+        self._api_secret = api_secret
 
-        if api_key is None and "BCEX_API_KEY" in os.environ:
-            self._api_key = os.environ["BCEX_API_KEY"]
+        if api_secret is None and "BCEX_API_SECRET" in os.environ:
+            self._api_secret = os.environ["BCEX_API_SECRET"]
 
         # use these dictionaries to store the data we receive
         self.balances = {}
@@ -180,7 +180,7 @@ class BcexClient(object):
         self._public_subscription()
 
         # Authenticated private subscriptions
-        if self.api_key is not None:
+        if self.api_secret is not None:
             self._private_subscription()
         else:
             logging.warning(
@@ -206,7 +206,7 @@ class BcexClient(object):
 
     def connect(self):
         """Connects to the websocket and runs it, will determine whether to establish the token refresh based on s
-        elf.use_api_key
+        elf.use_api_secret
         """
         self.ws = webs.WebSocketApp(
             self.ws_url,
@@ -337,10 +337,11 @@ class BcexClient(object):
 
     def _on_price_updates(self, msg):
         """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
-        key = msg["symbol"]
         if msg["event"] == Event.SUBSCRIBED:
+            key = msg["symbol"]
             logging.info(f"{key} candles subscribed to.")
         elif msg["event"] == Event.UPDATED:
+            key = msg["symbol"]
             # TODO: what else would be inside the msg?
             if "price" in msg:
                 candles = self.candles[key]
@@ -424,7 +425,7 @@ class BcexClient(object):
 
     def _on_order_update(self, msg):
         message = OrderResponse(msg)
-        symbol = message.instrument
+        symbol = message.symbol
         self.open_orders[symbol][message.order_id] = message
 
         if message.order_status in OrderStatus.terminal_states():
@@ -455,10 +456,10 @@ class BcexClient(object):
         order : Order
             the order you want to send
         """
-        if order.instrument not in self.symbols:
+        if order.symbol not in self.symbols:
             logging.error(
-                f"[{order}] Sending orders for an instrument without subscribing to the market is not safe."
-                f" You should subscribe first to instrument {order.instrument}"
+                f"[{order}] Sending orders for an symbol without subscribing to the market is not safe."
+                f" You should subscribe first to symbol {order.symbol}"
             )
         else:
             self.send_force_order(order)
@@ -474,19 +475,23 @@ class BcexClient(object):
         self.ws.send(json.dumps(order.order_to_dict()))
 
     @property
-    def api_key(self):
+    def api_secret(self):
         """Api key required by the websocket
 
-        if _api_key is not None, it is taken from the environment variable MERCURY_API_KEY
+        if _api_secret is not None, it is taken from the environment variable BCEX_API_SECRET
 
         Returns
         -------
         str
         """
-        return self._api_key
+        return self._api_secret
 
     def _authenticate(self):
-        auth_params = {"channel": "auth", "action": "subscribe", "token": self.api_key}
+        auth_params = {
+            "channel": "auth",
+            "action": "subscribe",
+            "token": self.api_secret,
+        }
         self.ws.send(json.dumps(auth_params))
         self._wait_for_authentication()
 

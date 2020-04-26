@@ -4,21 +4,21 @@ import time
 from copy import deepcopy
 
 import numpy as np
-from core.instrument import Instrument
 from core.order_response import OrderStatus
 from core.orders import Order, OrderSide, OrderType, TimeInForce
+from core.symbol import Symbol
 from core.websocket_client import BcexClient
 
-order_quantity_map = {Instrument.ETHBTC: 2, Instrument.BTCUSD: 0.001}
-increment_map = {Instrument.ETHBTC: 0.001, Instrument.BTCUSD: 1}
-rounding_map = {Instrument.ETHBTC: 3, Instrument.BTCUSD: 0}
+order_quantity_map = {Symbol.ETHBTC: 2, Symbol.BTCUSD: 0.001}
+increment_map = {Symbol.ETHBTC: 0.001, Symbol.BTCUSD: 1}
+rounding_map = {Symbol.ETHBTC: 3, Symbol.BTCUSD: 0}
 
 
 def main():
     sleep_time = 5
     levels = 5
-    instrs = [Instrument.ETHBTC, Instrument.BTCUSD]
-    merc_client = BcexClient(symbols=instrs)
+    symbols = [Symbol.ETHBTC, Symbol.BTCUSD]
+    merc_client = BcexClient(symbols=symbols)
     merc_client.connect()
     try:
         while True:
@@ -34,24 +34,24 @@ def main():
                         merc_client.send_order(
                             Order(OrderType.CANCEL, mercury_order_id=merid)
                         )
-            for instr in instrs:
-                buy_price = merc_client.last_price.get(instr, None)
+            for symbol in symbols:
+                buy_price = merc_client.last_price.get(symbol, None)
                 if buy_price is not None:
-                    balance = merc_client.balances.get(instr[-3:], {}).get(
+                    balance = merc_client.balances.get(symbol[-3:], {}).get(
                         "available", 0
                     )
                     if balance > 0:
                         for k in range(levels):
 
                             n = np.random.choice(20)
-                            price = buy_price - n * increment_map[instr]
-                            price = round(price, rounding_map[instr])
+                            price = buy_price - n * increment_map[symbol]
+                            price = round(price, rounding_map[symbol])
 
                             v = 1 + np.random.choice(5)
-                            order_quantity = order_quantity_map[instr] * v
+                            order_quantity = order_quantity_map[symbol] * v
                             o = Order(
                                 OrderType.LIMIT,
-                                instrument=instr,
+                                symbol=symbol,
                                 price=price,
                                 side=OrderSide.BUY,
                                 time_in_force=TimeInForce.GTC,
@@ -59,28 +59,28 @@ def main():
                             )
                             logging.info(
                                 "Sending Buy {} Limit at {} amount {}".format(
-                                    instr, price, order_quantity
+                                    symbol, price, order_quantity
                                 )
                             )
                             merc_client.send_order(o)
 
-                sell_price = merc_client.last_price.get(instr, None)
+                sell_price = merc_client.last_price.get(symbol, None)
                 if sell_price is not None:
-                    balance = merc_client.balances.get(instr[:3], {}).get(
+                    balance = merc_client.balances.get(symbol[:3], {}).get(
                         "available", 0
                     )
                     if balance > 0:
                         for k in range(levels):
 
                             n = np.random.choice(20)
-                            price = sell_price + n * increment_map[instr]
-                            price = round(price, rounding_map[instr])
+                            price = sell_price + n * increment_map[symbol]
+                            price = round(price, rounding_map[symbol])
 
                             v = 1 + np.random.choice(5)
-                            order_quantity = order_quantity_map[instr] * v
+                            order_quantity = order_quantity_map[symbol] * v
                             o = Order(
                                 OrderType.LIMIT,
-                                instrument=instr,
+                                symbol=symb,
                                 price=price,
                                 side=OrderSide.SELL,
                                 time_in_force=TimeInForce.GTC,
@@ -88,7 +88,7 @@ def main():
                             )
                             logging.info(
                                 "Sending Sell {} Limit at {} amount {}".format(
-                                    instr, price, order_quantity
+                                    symbol, price, order_quantity
                                 )
                             )
                             logging.info(f"Order: {o.order_to_dict()}")
