@@ -32,11 +32,12 @@ class OrderAction:
     PLACE_ORDER = "NewOrderSingle"
     BULK_CANCEL = "BulkCancelOrderRequest"
 
+
 class Order:
     def __init__(
         self,
         order_type,
-        instrument=None,
+        symbol=None,
         time_in_force=None,
         side=None,
         order_quantity=None,
@@ -48,7 +49,7 @@ class Order:
         post_only=True,
     ):
         self.order_type = order_type
-        self.instrument = instrument
+        self.symbol = symbol
         self.time_in_force = time_in_force
         self.side = side
         self.order_quantity = order_quantity
@@ -71,13 +72,13 @@ class Order:
         self.post_only = post_only
 
     def __str__(self):
-        return f"{self.order_id} - {self.side} {self.order_quantity}@{self.price} {self.instrument}"
+        return f"{self.order_id} - {self.side} {self.order_quantity}@{self.price} {self.symbol}"
 
     def check_valid_order(self):
         if self.action is OrderAction.PLACE_ORDER:
-            if self.instrument is None:
+            if self.symbol is None:
                 raise ValueError(
-                    "Must have instrument for order type {}".format(self.order_type)
+                    "Must have symbol for order type {}".format(self.order_type)
                 )
             if self.time_in_force is None:
                 raise ValueError(
@@ -140,7 +141,7 @@ class Order:
                 "action": "NewOrderSingle",
                 "channel": "trading",
                 "clOrdID": self.client_order_id,
-                "symbol": self.instrument,
+                "symbol": self.symbol,
                 "ordType": self.order_type,
                 "timeInForce": self.time_in_force,
                 "side": self.side,
