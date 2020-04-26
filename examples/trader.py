@@ -12,9 +12,10 @@ class BaseTrader:
     CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS]
 
     def __init__(self, symbol, api_key=None, env=Environment.STAGING, refresh_rate=5):
-        self.exchange = ExchangeInterface([symbol], api_key=api_key, env=env,
+        self.exchange = ExchangeInterface([symbol], api_secret=api_key, env=env,
                                           channels=self.CHANNELS)
         self.exchange.connect()
+        time.sleep(5)
         self._symbol = symbol
         self._refresh_rate = refresh_rate
 
@@ -37,7 +38,6 @@ class BaseTrader:
         raise NotImplementedError("This should be implemented in subclass")
 
     def restart(self):
-        return
         # This is what bitmex one does - seems like it executes to whole script again - pretty cool?
         logging.warning("Restarting the market maker...")
         os.execv(sys.executable, [sys.executable] + sys.argv)
@@ -110,7 +110,7 @@ class BasicLadderQuotes(BaseTrader):
         lpm = self.exchange.get_last_traded_price(self.symbol)
         for k in range(1, self.n_levels + 1):
             self.exchange.place_order(
-                instrument=self.symbol,
+                symbol=self.symbol,
                 side=OrderSide.BUY,
                 quantity=self.n_lots * self.lot_size,
                 price=lpm - k * self.tick_size,
@@ -119,7 +119,7 @@ class BasicLadderQuotes(BaseTrader):
             )
 
             self.exchange.place_order(
-                instrument=self.symbol,
+                symbol=self.symbol,
                 side=OrderSide.SELL,
                 quantity=self.n_lots * self.lot_size,
                 price=lpm + k * self.tick_size,
@@ -162,6 +162,6 @@ class BasicLadderQuotes(BaseTrader):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    trader = BasicLadderQuotes("BTC-USD", 5, 3, refresh_rate=10)
+    trader = BasicLadderQuotes("ETH-BTC", 5, 3, refresh_rate=10)
 
     trader.run_loop()
