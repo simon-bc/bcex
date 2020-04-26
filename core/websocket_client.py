@@ -275,7 +275,7 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
-        logging.info(msg)
+        logging.debug(msg)
         # TODO: replace with generic`
         # getattr(self, f"_on_{msg['channel']}")(msg)
 
