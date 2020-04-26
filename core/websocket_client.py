@@ -78,9 +78,7 @@ class BcexClient(object):
     Attributes
     ----------
     balances : dict
-    last_price: dict
-    client_to_order_id: dict
-    order_status : dict
+    open_orders : dict
 
     Notes
     -----
@@ -209,11 +207,10 @@ class BcexClient(object):
             if channel == Channel.AUTH:
                 # already subscribed
                 continue
-            self.ws.send(json.dumps({"action": "subscribe", "channel": channel}))
+            self.ws.send(json.dumps({"action": Action.SUBSCRIBE, "channel": channel}))
 
     def connect(self):
-        """Connects to the websocket and runs it, will determine whether to establish the token refresh based on s
-        elf.use_api_secret
+        """Connects to the websocket and runs it
         """
         self.ws = webs.WebSocketApp(
             self.ws_url,
@@ -250,7 +247,6 @@ class BcexClient(object):
     def on_open(self):
         """What to do when a new websocket opens
         """
-
         logging.info("-------- Websocket opened ---------")
 
     def on_close(self):

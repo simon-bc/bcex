@@ -131,9 +131,7 @@ def quote_randomly_both_sides_interface(
             logging.info(f"Last Traded price {last_trade_price}")
             if last_trade_price:
                 balance_coin = symbol.split("-")[1]
-                balance = (
-                    ex_interface.get_balance().get(balance_coin, {}).get("available", 0)
-                )
+                balance = ex_interface.get_available_balance(balance_coin)
                 logging.info(f"Balance {balance} {balance_coin}")
                 if balance > 0:
                     for k in range(levels):
@@ -156,9 +154,7 @@ def quote_randomly_both_sides_interface(
                         )
 
                 balance_coin = symbol.split("-")[0]
-                balance = (
-                    ex_interface.get_balance().get(balance_coin, {}).get("available", 0)
-                )
+                balance = ex_interface.get_available_balance(balance_coin)
                 logging.info(f"Balance {balance} {balance_coin}")
                 if balance > 0:
                     for k in range(levels):
