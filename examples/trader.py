@@ -1,5 +1,7 @@
+import atexit
 import logging
 import os
+import signal
 import sys
 import time
 
@@ -18,8 +20,21 @@ class BaseTrader:
         self._symbol = symbol
         self._refresh_rate = refresh_rate
 
+        # Once exchange is created, register exit handler that will always cancel orders
+        # on any error.
+        atexit.register(self.exit)
+        signal.signal(signal.SIGTERM, self.exit)
+
+
         # TODO: might want to extend the cancellation of open orders to symbol specific?
         self.reset()
+
+    def exit(self):
+        logging.info("Shutting down. All open orders will be cancelled.")
+        try:
+            self.exchange.cancel_all_orders()
+        except Exception as e:
+            logging.info("Unable to cancel orders: %s" % e)
 
     @property
     def refresh_rate(self):
