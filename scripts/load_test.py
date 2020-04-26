@@ -1,12 +1,12 @@
 import logging
 
 from core.exchange_interface import ExchangeInterface
-from core.instrument import Instrument
+from core.symbol import Symbol
 from core.websocket_client import Channel, Environment
 from examples.quote_both_sides import quote_randomly_both_sides_interface
 from websocket import WebSocketConnectionClosedException
 
-order_quantity_map = {Instrument.ETHBTC: 0.024, Instrument.BTCUSD: 0.001}
+order_quantity_map = {Symbol.ETHBTC: 0.024, Symbol.BTCUSD: 0.001}
 
 RETRY_NUMBER = 5
 
@@ -16,7 +16,7 @@ def main():
     while attempt_number <= RETRY_NUMBER:
         try:
             ex_interface = ExchangeInterface(
-                instruments=[Instrument.ETHBTC, Instrument.BTCUSD],
+                symbols=[Symbol.ETHBTC, Symbol.BTCUSD],
                 channels=[
                     Channel.HEARTBEAT,
                     Channel.L2,

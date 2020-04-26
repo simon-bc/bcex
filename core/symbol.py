@@ -1,4 +1,4 @@
-class Instrument:
+class Symbol:
     BTCUSD = "BTC-USD"
     ETHUSD = "ETH-USD"
     ETHBTC = "ETH-BTC"

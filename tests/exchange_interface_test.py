@@ -1,8 +1,8 @@
 from collections import defaultdict
 
 from core.exchange_interface import ExchangeInterface
-from core.instrument import Instrument
 from core.orders import OrderSide
+from core.symbol import Symbol
 from core.websocket_client import Channel, Environment
 from sortedcontainers import SortedDict as sd
 
@@ -14,7 +14,7 @@ class MockWebsocketClient:
         channels=None,
         channel_kwargs=None,
         env=Environment.STAGING,
-        api_key=None,
+        api_secret=None,
     ):
         self.authenticated = False
 
@@ -23,7 +23,7 @@ class MockWebsocketClient:
         self.channels = channels or Channel.ALL
         self.channel_kwargs = channel_kwargs or {}
 
-        self._api_key = api_key
+        self._api_secret = api_secret
 
         # use these dictionaries to store the data we receive
         self.balances = {}
@@ -78,7 +78,7 @@ class TestExchangeInterface:
 
     def test_check_available_balance(self):
 
-        exi = ExchangeInterface(instruments=[Instrument.BTCUSD])
+        exi = ExchangeInterface(symbols=[Symbol.BTCUSD])
         exi.ws = MockWebsocketClient
         exi.ws.balances = {"BTC": {"available": 1}, "USD": {"available": 1000}}
         ins_details = {

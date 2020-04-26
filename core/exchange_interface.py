@@ -10,40 +10,40 @@ class ExchangeInterface:
 
     def __init__(
         self,
-        instruments,
-        api_key=None,
+        symbols,
+        api_secret=None,
         env=Environment.STAGING,
         channels=REQUIRED_CHANNELS,
     ):
-        self.ws = BcexClient(instruments, channels=channels, api_key=api_key, env=env)
+        self.ws = BcexClient(symbols, channels=channels, api_secret=api_secret, env=env)
 
     def connect(self):
         self.ws.connect()
 
     @staticmethod
-    def _scale_quantity(instr_details, quantity):
-        quantity = round(quantity, instr_details["base_currency_scale"])
+    def _scale_quantity(symbol_details, quantity):
+        quantity = round(quantity, symbol_details["base_currency_scale"])
         return quantity
 
     @staticmethod
-    def _scale_price(instr_details, price):
+    def _scale_price(symbol_details, price):
         price_multiple = (
-            price * 10 ** instr_details["min_price_increment_scale"]
-        ) / instr_details["min_price_increment"]
+            price * 10 ** symbol_details["min_price_increment_scale"]
+        ) / symbol_details["min_price_increment"]
         price = (
             math.floor(price_multiple)
-            * instr_details["min_price_increment"]
-            / 10 ** instr_details["min_price_increment_scale"]
+            * symbol_details["min_price_increment"]
+            / 10 ** symbol_details["min_price_increment_scale"]
         )
         return price
 
     @staticmethod
-    def _check_quantity_within_limits(instr_details, quantity):
-        max_limit = instr_details["max_order_size"] / (
-            10 ** instr_details["max_order_size_scale"]
+    def _check_quantity_within_limits(symbol_details, quantity):
+        max_limit = symbol_details["max_order_size"] / (
+            10 ** symbol_details["max_order_size_scale"]
         )
-        min_limit = instr_details["min_order_size"] / (
-            10 ** instr_details["min_order_size_scale"]
+        min_limit = symbol_details["min_order_size"] / (
+            10 ** symbol_details["min_order_size_scale"]
         )
         if quantity < min_limit:
             logging.warning(f"Quantity {quantity} less than min {min_limit}")
@@ -55,12 +55,12 @@ class ExchangeInterface:
             return False
         return True
 
-    def _check_available_balance(self, instr_details, side, quantity, price):
+    def _check_available_balance(self, symbol_details, side, quantity, price):
         if side == OrderSide.BUY:
-            currency = instr_details["base_currency"]
+            currency = symbol_details["base_currency"]
             quantity_in_currency = quantity
         else:
-            currency = instr_details["counter_currency"]
+            currency = symbol_details["counter_currency"]
             quantity_in_currency = quantity * price
         balances = self.get_balance()
         available_balance = balances[currency]["available"]
@@ -74,7 +74,7 @@ class ExchangeInterface:
 
     def _create_order(
         self,
-        instrument,
+        symbol,
         side,
         quantity,
         price,
@@ -85,22 +85,22 @@ class ExchangeInterface:
         stop_price,
         check_balance=False,
     ):
-        # assumes websocket has subscribed to symbol details of this instrument
-        instr_details = self.ws.symbol_details[instrument]
-        quantity = self._scale_quantity(instr_details, quantity)
-        if not self._check_quantity_within_limits(instr_details, quantity):
+        # assumes websocket has subscribed to symbol details of this symbol
+        symbol_details = self.ws.symbol_details[symbol]
+        quantity = self._scale_quantity(symbol_details, quantity)
+        if not self._check_quantity_within_limits(symbol_details, quantity):
             return False
         if price is not None:
-            price = self._scale_price(instr_details, price)
+            price = self._scale_price(symbol_details, price)
         if check_balance and order_type == OrderType.LIMIT:
             has_balance = self._check_available_balance(
-                instr_details, side, quantity, price
+                symbol_details, side, quantity, price
             )
             if not has_balance:
                 return False
         return Order(
             order_type=order_type,
-            instrument=instrument,
+            symbol=symbol,
             side=side,
             price=price,
             order_quantity=quantity,
@@ -112,7 +112,7 @@ class ExchangeInterface:
 
     def place_order(
         self,
-        instrument,
+        symbol,
         side,
         quantity,
         price=None,
@@ -129,14 +129,14 @@ class ExchangeInterface:
 
         Parameters
         ----------
-        instrument : str
+        symbol : str
         side : OrderSide enum
         price : float
         quantity : float
 
         """
         order = self._create_order(
-            instrument,
+            symbol,
             side,
             quantity,
             price,
@@ -158,13 +158,13 @@ class ExchangeInterface:
     def cancel_order(self, order_id):
         self.ws.send_order(Order(OrderType.CANCEL, order_id=order_id))
 
-    def cancel_orders_for_instrument(self, instrument):
-        order_ids = self.ws.open_orders[instrument].keys()
+    def cancel_orders_for_symbol(self, symbol):
+        order_ids = self.ws.open_orders[symbol].keys()
         for o in order_ids:
             self.cancel_order(o)
 
-    def get_last_traded_price(self, instrument):
-        return self.ws.tickers.get(instrument)
+    def get_last_traded_price(self, symbol):
+        return self.ws.tickers.get(symbol)
 
     def get_ask_price(self, instrument):
         # sorted dict - first key is lowest price
@@ -176,30 +176,39 @@ class ExchangeInterface:
         book = self.ws.l2_book[instrument][Book.BID]
         return book.peekitem(-1) if len(book) > 0 else None
 
-    def get_all_open_orders(self, instruments=None):
+    def get_all_open_orders(self, symbols=None, to_dict=False):
         open_orders = {}
-        if instruments is None:
-            instruments = self.ws.open_orders.keys()
-        for i in instruments:
+        if symbols is None:
+            symbols = self.ws.open_orders.keys()
+        for i in symbols:
             open_orders.update(self.ws.open_orders[i])
-        return open_orders
+        if to_dict:
+            return {k: o.to_dict() for k, o in open_orders.items()}
+        else:
+            return open_orders
 
-    def get_order_details(self, order_id, instrument=None):
-        if instrument:
-            order = self.ws.open_orders[instrument].get(order_id)
+    def get_order_details(self, order_id, symbol=None, to_dict=True):
+        if symbol:
+            order = self.ws.open_orders[symbol].get(order_id)
             if order is None:
                 return order
-            return order.to_dict()
-        instruments = self.ws.open_orders.keys()
-        for i in instruments:
+            if to_dict:
+                return order.to_dict()
+            else:
+                return order
+        symbols = self.ws.open_orders.keys()
+        for i in symbols:
             order_details = self.ws.open_orders[i].get(order_id)
             if order_details:
-                return order_details.to_dict()
+                if to_dict:
+                    return order_details.to_dict()
+                else:
+                    return order_details
         return None
 
     def get_balance(self):
         return self.ws.balances
 
-    def get_instruments(self):
+    def get_symbols(self):
         return self.ws.symbols
 

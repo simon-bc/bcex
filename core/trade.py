@@ -2,8 +2,8 @@ from core.orders import OrderSide
 
 
 class Trade:
-    def __init__(self, instrument, price, quantity, side, timestamp, trade_id=None):
-        self.instrument = instrument
+    def __init__(self, symbol, price, quantity, side, timestamp, trade_id=None):
+        self.symbol = symbol
         self.price = price
         self.quantity = quantity
         if not OrderSide.is_valid(side):
@@ -15,11 +15,11 @@ class Trade:
 
     @staticmethod
     def parse_from_msg(msg):
-        instrument = msg["symbol"]
+        symbol = msg["symbol"]
         price = float(msg["price"])
         quantity = float(msg["qty"])
         side = msg["side"]
         timestamp = msg["timestamp"]
         trade_id = msg.get("trade_id")
 
-        return Trade(instrument, price, quantity, side, timestamp, trade_id)
+        return Trade(symbol, price, quantity, side, timestamp, trade_id)
