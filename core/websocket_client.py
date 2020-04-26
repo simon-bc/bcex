@@ -147,8 +147,8 @@ class BcexClient(object):
 
         self._api_key = api_key
 
-        if api_key is None and "MERCURY_API_KEY" in os.environ:
-            self._api_key = os.environ["MERCURY_API_KEY"]
+        if api_key is None and "BCEX_API_KEY" in os.environ:
+            self._api_key = os.environ["BCEX_API_KEY"]
 
         # use these dictionaries to store the data we receive
         self.balances = {}
@@ -378,6 +378,9 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             self.authenticated = True
         elif msg["event"] == Event.REJECTED:
+            if self.authenticated:
+                logging.warning("Trying To Authenticate while already authenticated")
+                return
             raise ValueError("Failed to authenticate")
 
     def _on_balance_updates(self, msg):
