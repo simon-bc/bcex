@@ -1,10 +1,9 @@
 import logging
 
+from core.instrument import Instrument
 from core.exchange_interface import ExchangeInterface
 from core.websocket_client import BcexClient, Channel
 from examples.quote_both_sides import quote_randomly_both_sides_interface
-
-from customers_analytics.mercury.mercury_db_utils import Instrument
 
 order_quantity_map = {Instrument.ETHBTC: 0.024, Instrument.BTCUSD: 0.001}
 

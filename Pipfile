@@ -6,8 +6,12 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
+numpy = '*'
 websocket-client = "*"
 sortedcontainers = "*"
+pytest = "*"
+pytest-env = "*"
+pytest-xdist = "*"
 
 [requires]
 python_version = "3.6"
