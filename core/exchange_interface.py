@@ -8,10 +8,14 @@ from core.websocket_client import BcexClient, Environment, Channel, Book
 class ExchangeInterface:
     REQUIRED_CHANNELS = [Channel.SYMBOLS, Channel.TICKER, Channel.TRADES]
 
-    def __init__(self, instruments, api_key=None, env=Environment.STAGING):
-        self.ws = BcexClient(
-            instruments, channels=self.REQUIRED_CHANNELS, api_key=api_key, env=env
-        )
+    def __init__(
+        self,
+        instruments,
+        api_key=None,
+        env=Environment.STAGING,
+        channels=REQUIRED_CHANNELS,
+    ):
+        self.ws = BcexClient(instruments, channels=channels, api_key=api_key, env=env)
 
     def connect(self):
         self.ws.connect()
@@ -146,7 +150,7 @@ class ExchangeInterface:
         if order is not False:
             self.ws.send_order(order)
 
-    def cancel_all_orders(self, instrument=None):
+    def cancel_all_orders(self):
         self.ws.cancel_all_orders()
 
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
@@ -174,20 +178,26 @@ class ExchangeInterface:
             instruments = self.ws.open_orders.keys()
         for i in instruments:
             open_orders.update(self.ws.open_orders[i])
-        return open_orders
+        return {k: o.to_dict() for k, o in open_orders.items()}
 
     def get_order_details(self, order_id, instrument=None):
         if instrument:
-            return self.ws.open_orders[instrument].get(order_id)
+            order = self.ws.open_orders[instrument].get(order_id)
+            if order is None:
+                return order
+            return order.to_dict()
         instruments = self.ws.open_orders.keys()
         for i in instruments:
             order_details = self.ws.open_orders[i].get(order_id)
             if order_details:
-                return order_details
+                return order_details.to_dict()
         return None
 
     def get_balance(self):
         return self.ws.balances
+
+    def get_instruments(self):
+        return self.ws.symbols
 
 
 if __name__ == "__main__":

@@ -70,3 +70,20 @@ class OrderResponse:
             msg_str += f"{attr}: {getattr(self, attr)}, "
 
         return msg_str
+
+    def to_dict(self):
+        return {
+            attr: getattr(self, attr)
+            for attr in [
+                "client_order_id",
+                "order_id",
+                "execution_id",
+                "order_status",
+                "price",
+                "order_type",
+                "order_side" "instrument",
+                "order_quantity",
+                "matched_quantity",
+                "left_quantity",
+            ]
+        }
