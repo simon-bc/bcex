@@ -14,14 +14,14 @@ class ExchangeInterface:
         api_secret=None,
         env=Environment.STAGING,
         channels=REQUIRED_CHANNELS,
-        close_position_on_exit=True,
+        cancel_position_on_exit=True,
     ):
         self.ws = BcexClient(
             symbols,
             channels=channels,
             api_secret=api_secret,
             env=env,
-            close_position_on_exit=close_position_on_exit,
+            cancel_position_on_exit=cancel_position_on_exit,
         )
 
     def connect(self):
