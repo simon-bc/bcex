@@ -2,13 +2,12 @@ import logging
 import random
 import time
 from copy import deepcopy
-import numpy as np
 
+import numpy as np
+from core.instrument import Instrument
 from core.order_response import OrderStatus
 from core.orders import Order, OrderSide, OrderType, TimeInForce
 from core.websocket_client import BcexClient
-
-from customers_analytics.mercury.mercury_db_utils import Instrument
 
 order_quantity_map = {Instrument.ETHBTC: 2, Instrument.BTCUSD: 0.001}
 increment_map = {Instrument.ETHBTC: 0.001, Instrument.BTCUSD: 1}

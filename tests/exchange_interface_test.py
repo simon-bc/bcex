@@ -1,11 +1,10 @@
 from collections import defaultdict
 
-from core.orders import OrderSide
-from customers_analytics.mercury.mercury_db_utils import Instrument
-from sortedcontainers import SortedDict as sd
-
 from core.exchange_interface import ExchangeInterface
-from core.websocket_client import Environment, Channel
+from core.instrument import Instrument
+from core.orders import OrderSide
+from core.websocket_client import Channel, Environment
+from sortedcontainers import SortedDict as sd
 
 
 class MockWebsocketClient:
@@ -42,6 +41,9 @@ class MockWebsocketClient:
         pass
 
 
+# TODO be consistent with floor / rounding / ceils
+
+
 class TestExchangeInterface:
     def test_scale_quantity(self):
         ins_details = {
@@ -49,6 +51,9 @@ class TestExchangeInterface:
         }
         assert ExchangeInterface._scale_quantity(ins_details, 0.01) == 0.01
         assert ExchangeInterface._scale_quantity(ins_details, 0.011) == 0.01
+        # assert ExchangeInterface._scale_quantity(ins_details, 0.0199) == 0.02
+        # assert ExchangeInterface._scale_quantity(ins_details, 2.555) == 2.56
+        # assert ExchangeInterface._scale_quantity(ins_details, 1222) == 1222
 
     def test_scale_price(self):
         ins_details = {"min_price_increment": 10, "min_price_increment_scale": 2}
@@ -56,6 +61,8 @@ class TestExchangeInterface:
         assert ExchangeInterface._scale_price(ins_details, 1000.001) == 1000
         assert ExchangeInterface._scale_price(ins_details, 1000.01) == 1000
         assert ExchangeInterface._scale_price(ins_details, 1000.1) == 1000.1
+        # assert ExchangeInterface._scale_price(ins_details, 1001.999) == 1002.0
+        # assert ExchangeInterface._scale_price(ins_details, 2.555) == 2.6
 
     def test_check_quantity_within_limits(self):
         ins_details = {
