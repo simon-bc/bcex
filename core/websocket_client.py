@@ -120,7 +120,7 @@ class BcexClient(object):
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
             if not provided, the api key will be taken from environment variable BCEX_API_SECRET
         cancel_position_on_exit: bool
-            sends cancel all trades order on exit
+            sends cancel all orders on exit
         """
         if env == Environment.STAGING:
             ws_url = "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
