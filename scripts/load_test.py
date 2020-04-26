@@ -12,25 +12,24 @@ RETRY_NUMBER = 5
 
 
 def main():
+    ex_interface = ExchangeInterface(
+        symbols=[Symbol.ETHBTC, Symbol.BTCUSD],
+        channels=[
+            Channel.HEARTBEAT,
+            Channel.L2,
+            Channel.PRICES,
+            Channel.SYMBOLS,
+            Channel.TICKER,
+            Channel.TRADES,
+            Channel.AUTH,
+            Channel.BALANCES,
+            Channel.TRADING,
+        ],
+        env=Environment.STAGING,
+    )
     attempt_number = 1
     while attempt_number <= RETRY_NUMBER:
         try:
-            ex_interface = ExchangeInterface(
-                symbols=[Symbol.ETHBTC, Symbol.BTCUSD],
-                channels=[
-                    Channel.HEARTBEAT,
-                    Channel.L2,
-                    Channel.PRICES,
-                    Channel.SYMBOLS,
-                    Channel.TICKER,
-                    Channel.TRADES,
-                    Channel.AUTH,
-                    Channel.BALANCES,
-                    Channel.TRADING,
-                ],
-                env=Environment.STAGING,
-            )
-
             sleep_time = 5
             levels = 5
 

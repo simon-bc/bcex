@@ -21,7 +21,6 @@ class Book:
 
 
 class Environment:
-    DEV = "Development"
     STAGING = "Staging"
     PROD = "Production"
 
@@ -98,6 +97,7 @@ class BcexClient(object):
         channel_kwargs=None,
         env=Environment.STAGING,
         api_secret=None,
+        cancel_position_on_exit=True,
     ):
         """This class connects to the PIT websocket client
 
@@ -119,6 +119,8 @@ class BcexClient(object):
         api_secret : str
             api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
             if not provided, the api key will be taken from environment variable BCEX_API_SECRET
+        cancel_position_on_exit: bool
+            sends cancel all trades order on exit
         """
         if env == Environment.STAGING:
             ws_url = "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
@@ -131,6 +133,7 @@ class BcexClient(object):
                 f"Environment {env} does not have associated ws, api and origin urls"
             )
 
+        self.cancel_position_on_exit = cancel_position_on_exit
         self._error = None
         self.authenticated = False
         self.ws_url = ws_url
@@ -253,6 +256,7 @@ class BcexClient(object):
     def on_close(self):
         """What to do when the websocket closes
         """
+        self.exit()
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
@@ -264,6 +268,8 @@ class BcexClient(object):
         self.exit()
 
     def exit(self):
+        if self.cancel_position_on_exit and self.authenticated:
+            self.cancel_all_orders()
         self.ws.close()
         self.exited = True
 
