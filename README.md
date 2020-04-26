@@ -5,6 +5,8 @@ This is a sample python client to connect to the [Blockchain.com Exchange](https
 
 In order to use the authenticated channels you will need to create an account on the exchange and generate an [API secret](https://exchange.blockchain.com/settings/api). You can then either pass the API secret to the client or you can store it as an enviroment variable BCEX_API_SECRET.
 
+To obtain access to staging environment, request to our support center needs to be made.
+
 The best starting place is to look at some of the [examples](https://github.com/simon-bc/bcex/tree/master/examples)
 
 Code formatting

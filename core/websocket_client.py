@@ -21,7 +21,6 @@ class Book:
 
 
 class Environment:
-    DEV = "Development"
     STAGING = "Staging"
     PROD = "Production"
 
