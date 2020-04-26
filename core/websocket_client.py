@@ -269,7 +269,7 @@ class BcexClient(object):
         self.exit()
 
     def exit(self):
-        if self.cancel_position_on_exit:
+        if self.cancel_position_on_exit and self.authenticated:
             self.cancel_all_orders()
         self.ws.close()
         self.exited = True
