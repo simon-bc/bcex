@@ -9,7 +9,7 @@ import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
-from core.utils import parse_balance
+from core.utils import parse_balance, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -115,8 +115,8 @@ class BcexClient(object):
             api key on exchange.blockchain.com gives access to Production environment
             To obtain access to staging environment, request to our support center needs to be made
         api_secret : str
-            api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
-            if not provided, the api key will be taken from environment variable BCEX_API_SECRET
+            api secret for the exchange which can be obtained once logged in, in settings (click on username) > Api
+            if not provided, the api secret will be taken from environment variable BCEX_API_SECRET
         cancel_position_on_exit: bool
             sends cancel all trades order on exit
         """
@@ -145,7 +145,7 @@ class BcexClient(object):
         )  # L3 not handled yet
 
         # default channel_kwargs
-        self.channel_kwargs = {"prices": {"granularity": 60}}
+        self.channel_kwargs = {Channel.PRICES: {"granularity": 60}}
         self._update_default_channel_kwargs(channel_kwargs)
 
         # webs.enableTrace(True)
@@ -168,6 +168,10 @@ class BcexClient(object):
         self.candles = defaultdict(list)
         self.market_trades = defaultdict(list)
         self.open_orders = defaultdict(dict)
+
+        # check health of the websocket
+        self._seqnum = -1  # higher seqnum that we received (usually the latest)
+        self._last_heartbeat = None
 
     def _update_default_channel_kwargs(self, channel_kwargs):
         # override channel_kwargs with specified channel_kwargs
@@ -294,6 +298,8 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
+        self._check_message_seqnum(msg)
+
         logging.debug(msg)
 
         if msg["channel"] == Channel.TRADING:
@@ -318,6 +324,31 @@ class BcexClient(object):
             self._on_symbols_updates(msg)
         else:
             self._on_message_unsupported(msg)
+
+    def _check_message_seqnum(self, msg):
+        """Checks that the messages received by the client increment by one
+
+        Notes
+        -----
+        If the client receives a seqnum which has skipped one or more sequences, it indicates that a message was missed
+        and the client is recommended to restart the websocket connection.
+        """
+        if "seqnum" not in msg:
+            logging.error(f"seqnum missing from msg {msg}")
+            return
+
+        seqnum = msg["seqnum"]
+        if seqnum > self._seqnum + 1:
+            self._seqnum = seqnum
+            logging.error(
+                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1}"
+            )
+            # TODO restart websocket connection
+        elif seqnum < self._seqnum + 1:
+            logging.warning(f"Received with delay message with seqnum {seqnum}")
+        else:
+            self._seqnum = seqnum
+            logging.debug(f"Received message with expected seqnum {seqnum}")
 
     def _on_message_unsupported(self, message):
         if message["channel"] in Channel.ALL:
@@ -431,7 +462,8 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Subscribed to the {msg['channel']} channel")
         elif msg["event"] == Event.UPDATED:
-            pass
+            self._last_heartbeat = valid_datetime(msg["timestamp"])
+            logging.debug(f"Updated last heartbeat to {self._last_heartbeat}")
         else:
             self._on_unsupported_event_message(msg, Channel.HEARTBEAT)
 

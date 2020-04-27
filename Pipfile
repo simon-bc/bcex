@@ -12,6 +12,7 @@ sortedcontainers = "*"
 pytest = "*"
 pytest-env = "*"
 pytest-xdist = "*"
+iso8601 = "*"
 
 [requires]
 python_version = "3.6"
