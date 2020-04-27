@@ -24,6 +24,7 @@ class ExchangeInterface:
         api_secret=None,
         env=Environment.STAGING,
         channels=None,
+        channels_kwargs=None,
         cancel_position_on_exit=True,
     ):
         """
@@ -50,6 +51,7 @@ class ExchangeInterface:
         self.ws = BcexClient(
             symbols,
             channels=channels,
+            channel_kwargs=channels_kwargs,
             api_secret=api_secret,
             env=env,
             cancel_position_on_exit=cancel_position_on_exit,
