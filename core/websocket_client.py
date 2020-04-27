@@ -146,12 +146,7 @@ class BcexClient(object):
 
         # default channel_kwargs
         self.channel_kwargs = {"prices": {"granularity": 60}}
-        # override channel_kwargs with specified channel_kwargs
-        if channel_kwargs is not None:
-            for ch, kw in channel_kwargs.items():
-                if ch not in self.channel_kwargs:
-                    self.channel_kwargs[ch] = {}
-                self.channel_kwargs[ch].update(channel_kwargs)
+        self._update_default_channel_kwargs(channel_kwargs)
 
         # webs.enableTrace(True)
         self.ws = None
@@ -173,6 +168,14 @@ class BcexClient(object):
         self.candles = defaultdict(list)
         self.market_trades = defaultdict(list)
         self.open_orders = defaultdict(dict)
+
+    def _update_default_channel_kwargs(self, channel_kwargs):
+        # override channel_kwargs with specified channel_kwargs
+        if channel_kwargs is not None:
+            for ch, kw in channel_kwargs.items():
+                if ch not in self.channel_kwargs:
+                    self.channel_kwargs[ch] = {}
+                self.channel_kwargs[ch].update(channel_kwargs)
 
     def _check_attributes(self):
         for attr, _type in [
