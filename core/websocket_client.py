@@ -9,7 +9,7 @@ import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
-from core.utils import parse_balance
+from core.utils import parse_balance, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -115,8 +115,8 @@ class BcexClient(object):
             api key on exchange.blockchain.com gives access to Production environment
             To obtain access to staging environment, request to our support center needs to be made
         api_secret : str
-            api key for the exchange which can be obtained once logged in, in settings (click on username) > Api
-            if not provided, the api key will be taken from environment variable BCEX_API_SECRET
+            api secret for the exchange which can be obtained once logged in, in settings (click on username) > Api
+            if not provided, the api secret will be taken from environment variable BCEX_API_SECRET
         cancel_position_on_exit: bool
             sends cancel all trades order on exit
         """
@@ -143,7 +143,10 @@ class BcexClient(object):
         self.channels = channels or list(
             set(Channel.ALL) - {Channel.L3}
         )  # L3 not handled yet
-        self.channel_kwargs = channel_kwargs or {}
+
+        # default channel_kwargs
+        self.channel_kwargs = {Channel.PRICES: {"granularity": 60}}
+        self._update_default_channel_kwargs(channel_kwargs)
 
         # webs.enableTrace(True)
         self.ws = None
@@ -165,6 +168,18 @@ class BcexClient(object):
         self.candles = defaultdict(list)
         self.market_trades = defaultdict(list)
         self.open_orders = defaultdict(dict)
+
+        # check health of the websocket
+        self._seqnum = -1  # higher seqnum that we received (usually the latest)
+        self._last_heartbeat = None
+
+    def _update_default_channel_kwargs(self, channel_kwargs):
+        # override channel_kwargs with specified channel_kwargs
+        if channel_kwargs is not None:
+            for ch, kw in channel_kwargs.items():
+                if ch not in self.channel_kwargs:
+                    self.channel_kwargs[ch] = {}
+                self.channel_kwargs[ch].update(channel_kwargs)
 
     def _check_attributes(self):
         for attr, _type in [
@@ -285,9 +300,9 @@ class BcexClient(object):
             return
 
         msg = json.loads(msg)
+        self._check_message_seqnum(msg)
+
         logging.debug(msg)
-        # TODO: replace with generic`
-        # getattr(self, f"_on_{msg['channel']}")(msg)
 
         if msg["channel"] == Channel.TRADING:
             self._on_trading_updates(msg)
@@ -306,11 +321,36 @@ class BcexClient(object):
         elif msg["channel"] == Channel.HEARTBEAT:
             self._on_heartbeat_updates(msg)
         elif msg["channel"] == Channel.TRADES:
-            self._on_market_trade(msg)
+            self._on_market_trade_updates(msg)
         elif msg["channel"] == Channel.SYMBOLS:
             self._on_symbols_updates(msg)
         else:
             self._on_message_unsupported(msg)
+
+    def _check_message_seqnum(self, msg):
+        """Checks that the messages received by the client increment by one
+
+        Notes
+        -----
+        If the client receives a seqnum which has skipped one or more sequences, it indicates that a message was missed
+        and the client is recommended to restart the websocket connection.
+        """
+        if "seqnum" not in msg:
+            logging.error(f"seqnum missing from msg {msg}")
+            return
+
+        seqnum = msg["seqnum"]
+        if seqnum > self._seqnum + 1:
+            self._seqnum = seqnum
+            logging.error(
+                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1}"
+            )
+            # TODO restart websocket connection
+        elif seqnum < self._seqnum + 1:
+            logging.warning(f"Received with delay message with seqnum {seqnum}")
+        else:
+            self._seqnum = seqnum
+            logging.debug(f"Received message with expected seqnum {seqnum}")
 
     def _on_message_unsupported(self, message):
         if message["channel"] in Channel.ALL:
@@ -326,25 +366,29 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Successfully subscribed to symbols")
         elif msg["event"] == Event.SNAPSHOT:
-            # TODO: double check
+            # has only one symbol per message unlike the documentation
             symbol = msg["symbol"]
             self.symbol_details.update({symbol: msg})
         elif msg["event"] == Event.UPDATED:
             # TODO: should we drop the extra info
             symbol = msg["symbol"]
             self.symbol_details[symbol].update(msg)
-
-    def _on_market_trade(self, msg):
-        """Handle market trades by appending to symbol trade history"""
-        symbol = msg["symbol"]
-        if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Successfully subscribed to trades for {symbol}")
         else:
+            self._on_unsupported_event_message(msg, Channel.SYMBOLS)
+
+    def _on_market_trade_updates(self, msg):
+        """Handle market trades by appending to symbol trade history"""
+        if msg["event"] == Event.SUBSCRIBED:
+            logging.info(f"Successfully subscribed to trades for {msg['symbol']}")
+        elif msg["event"] == Event.UPDATED:
+            symbol = msg["symbol"]
             trades = self.market_trades[symbol]
             trade = Trade.parse_from_msg(msg)
             self.market_trades[symbol] = _update_max_list(
                 trades, trade, self.MAX_TRADES_LEN
             )
+        else:
+            self._on_unsupported_event_message(msg, Channel.TRADES)
 
     def _on_price_updates(self, msg):
         """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
@@ -363,20 +407,25 @@ class BcexClient(object):
         elif msg["event"] == Event.REJECTED:
             logging.warning(f"Price update rejected. Reason : {msg['text']}")
         else:
-            if msg["event"] in Event.ALL:
-                logging.warning(
-                    f"Price updates messages with event {msg['event']} not supported by client"
-                )
-            else:
-                logging.error(
-                    f"Websocket returned a price update message with an unknown event {msg['event']}"
-                )
+            self._on_unsupported_event_message(msg, Channel.PRICES)
+
+    def _on_unsupported_event_message(self, msg, channel):
+        if msg["event"] in Event.ALL:
+            logging.warning(
+                f"Message updates from channel {channel} with event {msg['event']} not supported by client"
+            )
+        else:
+            logging.error(
+                f"Websocket returned a {channel} update message with an unknown event {msg['event']}"
+            )
 
     def _on_ticker_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Subscribed to the {msg['channel']} channel")
         elif "last_trade_price" in msg:
             self.tickers[msg["symbol"]] = msg["last_trade_price"]
+        else:
+            self._on_unsupported_event_message(msg, Channel.TICKER)
 
     def _on_l2_updates(self, msg):
         symbol = msg["symbol"]
@@ -384,8 +433,11 @@ class BcexClient(object):
         if msg["event"] == Event.SNAPSHOT:
             # We should clear existing levels
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
-
-        if msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
+        if msg["event"] == Event.SUBSCRIBED:
+            logging.info(
+                f"Subscribed to the {msg['channel']} channel for symbol {symbol}"
+            )
+        elif msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
             for book in [Book.BID, Book.ASK]:
                 updates = msg[book]
                 for data in updates:
@@ -397,6 +449,8 @@ class BcexClient(object):
                         self.l2_book[symbol][book].pop(price)
                     else:
                         self.l2_book[symbol][book][price] = size
+        else:
+            self._on_unsupported_event_message(msg, Channel.L2)
 
         if len(self.l2_book[symbol][Book.ASK]) > 0:
             logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
@@ -404,15 +458,16 @@ class BcexClient(object):
             logging.info(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
 
     def _on_l3_updates(self, msg):
-        logging.info(msg)
+        logging.debug(msg)
 
     def _on_heartbeat_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Subscribed to the {msg['channel']} channel")
         elif msg["event"] == Event.UPDATED:
-            pass
+            self._last_heartbeat = valid_datetime(msg["timestamp"])
+            logging.debug(f"Updated last heartbeat to {self._last_heartbeat}")
         else:
-            pass
+            self._on_unsupported_event_message(msg, Channel.HEARTBEAT)
 
     def _on_auth_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
@@ -422,15 +477,19 @@ class BcexClient(object):
                 logging.warning("Trying To Authenticate while already authenticated")
                 return
             raise ValueError("Failed to authenticate")
+        else:
+            self._on_unsupported_event_message(msg, Channel.AUTH)
 
     def _on_balance_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Subscribed to the {msg['channel']} channel")
         elif msg["event"] == Event.SNAPSHOT:
             self.balances = parse_balance(msg["balances"])
+        else:
+            self._on_unsupported_event_message(msg, Channel.BALANCES)
 
     def _on_trading_updates(self, msg):
-        """ Process message relating to trading activity"""
+        """Process message relating to trading activity"""
         if msg["event"] == Event.UPDATED:
             self._on_order_update(msg)
         elif msg["event"] == Event.SNAPSHOT:
@@ -440,14 +499,7 @@ class BcexClient(object):
         elif msg["event"] == Event.SUBSCRIBED:
             logging.info(f"Subscribed to the {msg['channel']} channel")
         else:
-            if msg["event"] in Event.ALL:
-                logging.warning(
-                    f"Trading messages with event {msg['event']} not supported by client"
-                )
-            else:
-                logging.error(
-                    f"Websocket returned a trading message with an unknown event {msg['event']}"
-                )
+            self._on_unsupported_event_message(msg, Channel.TRADING)
 
     def _on_order_update(self, msg):
         message = OrderResponse(msg)
@@ -466,7 +518,6 @@ class BcexClient(object):
     def _on_order_rejection(self, msg):
         # TODO: handle outgoing orders - those without orderID yet
         logging.info(f"Removing {msg['orderID']} from open orders")
-        logging.debug(msg)
 
     def cancel_order(self, order_id):
         return self.send_order(Order(OrderType.CANCEL, order_id=order_id))
