@@ -14,9 +14,6 @@ class Test(TestCommand):
         errno = pytest.main(["tests/"])
         sys.exit(errno)
 
-
-REQUIRED = open("requirements.txt").read()
-
 setuptools.setup(
     name="bcex",
     version="0.0.1",
@@ -28,7 +25,12 @@ setuptools.setup(
     url="https://github.com/simon-bc/bcex",
     packages=setuptools.find_packages(exclude=["tests", "scripts"]),
     cmdclass={"test": Test},
-    install_requires=REQUIRED,
+    install_requires=[
+        "numpy",
+        "websocket-client",
+        "sortedcontainers",
+        "iso8601",
+    ],
     tests_require=["pytest"],
     keywords=[
         "cryptocurrency",
