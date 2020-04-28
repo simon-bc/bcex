@@ -1,5 +1,7 @@
 Blockchain.com Exchange python client
 =====================================
+[![PyPi](https://img.shields.io/pypi/v/bcex.svg)](https://pypi.python.org/pypi/bcex)
+![Python](https://img.shields.io/badge/Python-3.6+-green.svg)
 
 This is a sample python client to connect to the [Blockchain.com Exchange](https://exchange.blockchain.com).
 
