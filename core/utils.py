@@ -23,3 +23,9 @@ def valid_datetime(s):
     """
 
     return iso8601.parse_date(s)
+
+
+def update_max_list(l, e, n):
+    """Update a list and enforce maximum length"""
+    l.append(e)
+    return l[-n:]

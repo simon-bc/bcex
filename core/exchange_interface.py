@@ -316,6 +316,18 @@ class ExchangeInterface:
             check if balance is sufficient for order
 
         """
+        if symbol not in self.ws.symbols:
+            logging.error(
+                f"Cannot place an order for symbol {symbol}. You need to subscribe to the symbol first"
+            )
+            return
+        if symbol not in self.ws.symbol_details:
+            logging.warning(
+                f"Could not find symbol details for {symbol}. Make sure the symbol was successfully "
+                f"subscribed to."
+            )
+            return
+
         order = self._create_order(
             symbol,
             side,
@@ -382,7 +394,7 @@ class ExchangeInterface:
         last_traded_price : float
             last matched price for symbol
         """
-        return self.ws.tickers.get(symbol)
+        return self.ws.tickers.get(symbol, {}).get("last_traded_price")
 
     def get_ask_price(self, symbol):
         """Get the ask price for the given symbol
@@ -483,8 +495,11 @@ class ExchangeInterface:
         """Get all the symbols"""
         return self.ws.symbols
 
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    exchange = ExchangeInterface(["BTC-USD"], channels=[Channel.TICKER])
+    exchange = ExchangeInterface(["BTC-USD", "ETH-USD"])
 
     exchange.connect()
+    while True:
+        pass
