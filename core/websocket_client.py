@@ -100,7 +100,7 @@ class ChannelStatus:
 
 
 class BcexClient(object):
-    """Blockchain Exchange Websocket API client v1
+    """Blockchain.com Exchange Websocket API client v1
 
     Attributes
     ----------
@@ -219,6 +219,8 @@ class BcexClient(object):
                 self.channel_kwargs[ch].update(channel_kwargs)
 
     def _init_channel_status(self):
+        """Initialise or reset channel status
+        """
         self.channel_status = {}
         # channels symbols specific
         for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
@@ -373,6 +375,8 @@ class BcexClient(object):
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
+        """On error websocket connection
+        """
         self._on_error(error)
 
     def _on_error(self, err):
@@ -381,10 +385,13 @@ class BcexClient(object):
         self.exit()
 
     def exit(self):
+        """On exit websocket connection
+        """
         if self.cancel_position_on_exit and self.authenticated:
             self.cancel_all_orders()
         self.ws.close()
         self.exited = True
+        self._init_channel_status()
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
