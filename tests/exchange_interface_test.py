@@ -40,6 +40,12 @@ class MockWebsocketClient:
     def connect(self):
         pass
 
+    def close(self):
+        pass
+
+    def exit(self):
+        pass
+
 
 # TODO be consistent with floor / rounding / ceils
 
@@ -79,7 +85,7 @@ class TestExchangeInterface:
     def test_check_available_balance(self):
 
         exi = ExchangeInterface(symbols=[Symbol.BTCUSD])
-        exi.ws = MockWebsocketClient
+        exi.ws = MockWebsocketClient(symbols=[Symbol.BTCUSD])
         exi.ws.balances = {"BTC": {"available": 1}, "USD": {"available": 1000}}
         ins_details = {
             "symbol": "BTC-USD",
@@ -91,3 +97,25 @@ class TestExchangeInterface:
         assert not exi._check_available_balance(ins_details, OrderSide.BUY, 5, 10000)
         assert not exi._check_available_balance(ins_details, OrderSide.SELL, 0.5, 10000)
         assert exi._check_available_balance(ins_details, OrderSide.SELL, 0.09, 10000)
+
+    def test_get_last_traded_price(self):
+        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi.ws = MockWebsocketClient(symbols=[Symbol.BTCUSD])
+
+        exi.ws.tickers = {}
+        act = exi.get_last_traded_price(Symbol.ETHBTC)
+        assert act is None
+
+        exi.ws.tickers = {Symbol.ETHBTC: {"volume_24h": 13.1, "price_24h": 21.139}}
+        act = exi.get_last_traded_price(Symbol.ETHBTC)
+        assert act is None
+
+        exi.ws.tickers = {
+            Symbol.ETHBTC: {
+                "volume_24h": 13.1,
+                "price_24h": 21.139,
+                "last_trade_price": 20.120,
+            }
+        }
+        act = exi.get_last_traded_price(Symbol.ETHBTC)
+        assert act == 20.120
