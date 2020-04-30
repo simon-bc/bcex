@@ -14,6 +14,7 @@ class Test(TestCommand):
         errno = pytest.main(["tests/"])
         sys.exit(errno)
 
+
 setuptools.setup(
     name="bcex",
     version="0.0.1",
@@ -30,6 +31,7 @@ setuptools.setup(
         "websocket-client",
         "sortedcontainers",
         "iso8601",
+        "pytz",
     ],
     tests_require=["pytest"],
     keywords=[

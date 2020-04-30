@@ -4,7 +4,9 @@ import os
 import threading
 import time
 from collections import defaultdict
+from datetime import datetime, timedelta
 
+import pytz
 import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
@@ -112,7 +114,9 @@ class BcexClient(object):
          - for symbol specific channels, the value is a dict with key the symbol, str from the enum Symbol
             and value the status, str from the enum ChannelStatus
          - for non-symbol specific channels, the value is the status, str from the enum ChannelStatus
-
+    ws: WebSocketClient
+    wst: Thread
+        websocket client thread
     Notes
     -----
     Official documentation for the api can be found in https://exchange.blockchain.com/api/
@@ -337,10 +341,10 @@ class BcexClient(object):
             on_error=self.on_error,
             on_close=self.on_close,
             on_open=self.on_open,
-            on_ping=None,
+            on_ping=self.on_ping,
         )
         self.wst = threading.Thread(
-            target=lambda: self.ws.run_forever(origin=self.origin)
+            target=lambda: self.ws.run_forever(origin=self.origin, ping_interval=5)
         )
         self.wst.daemon = True
         self.wst.start()
@@ -371,7 +375,10 @@ class BcexClient(object):
     def on_close(self):
         """What to do when the websocket closes
         """
-        self.exit()
+        if self.cancel_position_on_exit and self.authenticated:
+            logging.info(f"Cancelling all orders before exiting")
+            self.cancel_all_orders()
+        self._init_channel_status()
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
@@ -384,14 +391,37 @@ class BcexClient(object):
         logging.error(err)
         self.exit()
 
+    def on_ping(self, *args):
+        """On ping interval from WebSocket Client.
+
+        This checks health of the websocket on a regular basis
+
+        Parameters
+        ----------
+        args : list
+            unused
+        """
+        if self.channel_status[Channel.HEARTBEAT] != ChannelStatus.SUBSCRIBED:
+            return
+        now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        if self._last_heartbeat is None:
+            self._last_heartbeat = now
+        log_heartbeat = f"[{now}] Last heartbeat was {(now - self._last_heartbeat).total_seconds()} seconds ago."
+        if now - self._last_heartbeat > timedelta(seconds=10):
+            logging.error(log_heartbeat + " Exiting")
+            self.exit()
+        elif (
+            timedelta(seconds=10) >= now - self._last_heartbeat >= timedelta(seconds=5)
+        ):
+            logging.warning(log_heartbeat + " Waiting few more seconds")
+        else:
+            logging.debug(log_heartbeat)
+
     def exit(self):
         """On exit websocket connection
         """
-        if self.cancel_position_on_exit and self.authenticated:
-            self.cancel_all_orders()
-        self.ws.close()
         self.exited = True
-        self._init_channel_status()
+        self.ws.close()
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
@@ -448,9 +478,9 @@ class BcexClient(object):
         if seqnum > self._seqnum + 1:
             self._seqnum = seqnum
             logging.error(
-                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1}"
+                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1} : Exiting"
             )
-            # TODO restart websocket connection
+            self.exit()
         elif seqnum < self._seqnum + 1:
             logging.warning(f"Received with delay message with seqnum {seqnum}")
         else:
@@ -500,12 +530,13 @@ class BcexClient(object):
             self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
             key = msg["symbol"]
-            # TODO: what else would be inside the msg?
             if "price" in msg:
                 candles = self.candles[key]
                 self.candles[key] = update_max_list(
                     candles, msg["price"], self.MAX_CANDLES_LEN
                 )
+            else:
+                logging.warning(f"Received a price update without price information")
         elif msg["event"] == Event.REJECTED:
             self._on_rejected_subscription_updates(msg)
         else:
