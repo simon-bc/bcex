@@ -2,10 +2,10 @@ import logging
 import random
 import time
 
-from core.exchange_interface import ExchangeInterface
-from core.order_response import OrderStatus
-from core.orders import OrderSide, OrderType, TimeInForce
-from core.symbol import Symbol
+from bcex_core.exchange_interface import ExchangeInterface
+from bcex_core.order_response import OrderStatus
+from bcex_core.orders import OrderSide, OrderType, TimeInForce
+from bcex_core.symbol import Symbol
 
 ORDER_QUANTITY_MAP = {Symbol.ETHBTC: 0.024, Symbol.BTCUSD: 0.001}
 

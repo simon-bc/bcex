@@ -3,17 +3,18 @@ import os
 import sys
 import time
 
-from core.exchange_interface import ExchangeInterface
-from core.orders import OrderType, OrderSide, TimeInForce, Order
-from core.websocket_client import Environment, Channel
+from bcex_core.exchange_interface import ExchangeInterface
+from bcex_core.orders import OrderSide, OrderType, TimeInForce
+from bcex_core.websocket_client import Channel, Environment
 
 
 class BaseTrader:
     CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS]
 
     def __init__(self, symbol, api_key=None, env=Environment.STAGING, refresh_rate=5):
-        self.exchange = ExchangeInterface([symbol], api_secret=api_key, env=env,
-                                          channels=self.CHANNELS)
+        self.exchange = ExchangeInterface(
+            [symbol], api_secret=api_key, env=env, channels=self.CHANNELS
+        )
         self.exchange.connect()
         self._symbol = symbol
         self._refresh_rate = refresh_rate
@@ -125,7 +126,6 @@ class BasicLadderQuotes(BaseTrader):
                 order_type=OrderType.LIMIT,
                 time_in_force=TimeInForce.GTC,
             )
-
 
         # # TODO: might be nice if we could send a list of orders to the exchange interface
         # buy_orders = [

@@ -1,4 +1,4 @@
-from core.websocket_client import BcexClient, ChannelStatus
+from bcex_core.websocket_client import BcexClient, ChannelStatus
 from iso8601 import iso8601
 from sortedcontainers import SortedDict
 
