@@ -394,7 +394,7 @@ class ExchangeInterface:
         last_traded_price : float
             last matched price for symbol
         """
-        return self.ws.tickers.get(symbol, {}).get("last_traded_price")
+        return self.ws.tickers.get(symbol, {}).get("last_trade_price")
 
     def get_ask_price(self, symbol):
         """Get the ask price for the given symbol

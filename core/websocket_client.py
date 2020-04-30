@@ -306,7 +306,7 @@ class BcexClient(object):
             conn_timeout -= 1
             all_answered = True
             for channel, symbol in subscriptions_to_check:
-                if not self.check_channel_status(
+                if self.check_channel_status(
                     ChannelStatus.WAITING_CONFIRMATION, channel, symbol
                 ):
                     all_answered = False
@@ -507,7 +507,7 @@ class BcexClient(object):
                     candles, msg["price"], self.MAX_CANDLES_LEN
                 )
         elif msg["event"] == Event.REJECTED:
-            logging.warning(f"Price update rejected. Reason : {msg['text']}")
+            self._on_rejected_subscription_updates(msg)
         else:
             self._on_unsupported_event_message(msg, Channel.PRICES)
 
@@ -609,7 +609,7 @@ class BcexClient(object):
             if self.authenticated:
                 logging.warning("Trying To Authenticate while already authenticated")
                 return
-            raise ValueError("Failed to authenticate")
+            self._on_rejected_subscription_updates(msg)
         else:
             self._on_unsupported_event_message(msg, Channel.AUTH)
 
