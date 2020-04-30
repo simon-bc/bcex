@@ -94,22 +94,6 @@ class TestBcexClientPriceUpdates(object):
         assert trade.trade_id == "12884909920"
         assert trade.price == 11252.4
 
-    def test_on_ticker_updates(self):
-        client = BcexClient(symbols=["BTC-USD"])
-
-        msg = {
-            "seqnum": 8,
-            "event": "snapshot",
-            "channel": "ticker",
-            "symbol": "BTC-USD",
-            "price_24h": 4988.0,
-            "volume_24h": 0.3015,
-            "last_trade_price": 5000.0,
-        }
-        client._on_ticker_updates(msg)
-
-        assert client.tickers[msg["symbol"]] == 5000
-
     def test_on_l2_updates(self):
         client = BcexClient(symbols=["BTC-USD"])
 
@@ -335,3 +319,39 @@ class TestBcexClientPriceUpdates(object):
         client._on_trading_updates(msg)
 
         assert client.open_orders["BTC-USD"].get("12891851020") is None
+
+    def test_on_ticker_updates(self):
+        client = BcexClient(Mock())
+
+        # snapshot event - with last_trade_price
+        msg_1 = {
+            "seqnum": 1,
+            "event": "snapshot",
+            "channel": "ticker",
+            "symbol": "BTC-USD",
+            "price_24h": 7500.0,
+            "volume_24h": 0.0141,
+            "last_trade_price": 7499.0,
+        }
+        client._on_ticker_updates(msg_1)
+        assert client.tickers["BTC-USD"]["price_24h"] == 7500.0
+        assert client.tickers["BTC-USD"]["volume_24h"] == 0.0141
+        assert (
+            client.tickers["BTC-USD"]["last_trade_price"] == 7499.0
+        )  # from previous update
+
+        # updated event - no last_trade_price
+        msg_2 = {
+            "seqnum": 24,
+            "event": "updated",
+            "channel": "ticker",
+            "symbol": "BTC-USD",
+            "price_24h": 7500.1,
+            "volume_24h": 0.0142,
+        }
+        client._on_ticker_updates(msg_2)
+        assert client.tickers["BTC-USD"]["price_24h"] == 7500.1
+        assert client.tickers["BTC-USD"]["volume_24h"] == 0.0142
+        assert (
+            client.tickers["BTC-USD"]["last_trade_price"] == 7499.0
+        )  # from previous update

@@ -4,12 +4,14 @@ import os
 import threading
 import time
 from collections import defaultdict
+from datetime import datetime, timedelta
 
+import pytz
 import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
-from core.utils import parse_balance, valid_datetime
+from core.utils import parse_balance, update_max_list, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -52,6 +54,29 @@ class Channel:
     PUBLIC = [HEARTBEAT, TICKER, PRICES, TRADES, L2, L3, SYMBOLS]
     PRIVATE = [AUTH, BALANCES, TRADING]
 
+    @staticmethod
+    def is_symbol_specific(channel):
+        """Whether the channel is symbol specific
+        """
+        if channel in [
+            Channel.AUTH,
+            Channel.HEARTBEAT,
+            Channel.TRADING,
+            Channel.BALANCES,
+        ]:
+            return False
+        elif channel in [
+            Channel.L2,
+            Channel.L3,
+            Channel.PRICES,
+            Channel.SYMBOLS,
+            Channel.TICKER,
+            Channel.TRADES,
+        ]:
+            return True
+        else:
+            raise ValueError(f"Unexpected channel {channel}")
+
 
 class Event:
     """Indicate the purpose of the message
@@ -66,20 +91,32 @@ class Event:
     ALL = [UPDATED, SNAPSHOT, REJECTED, SUBSCRIBED, UNSUBSCRIBED]
 
 
-def _update_max_list(l, e, n):
-    """Update a list and enforce maximum length"""
-    l.append(e)
-    return l[-n:]
+class ChannelStatus:
+    """Indicates the status of the channels subscriptions
+    """
+
+    SUBSCRIBED = "subscribed"
+    UNSUBSCRIBED = "unsubscribed"
+    WAITING_CONFIRMATION = "waiting_confirmation"
+    REJECTED = "rejected"
 
 
 class BcexClient(object):
-    """Blockchain Exchange Websocket API client v1
+    """Blockchain.com Exchange Websocket API client v1
 
     Attributes
     ----------
     balances : dict
     open_orders : dict
-
+    channel_status: dict
+        keeps track of the status of each subscription using ChannelStatus
+        keys are channels, str from the enum Channel.
+         - for symbol specific channels, the value is a dict with key the symbol, str from the enum Symbol
+            and value the status, str from the enum ChannelStatus
+         - for non-symbol specific channels, the value is the status, str from the enum ChannelStatus
+    ws: WebSocketClient
+    wst: Thread
+        websocket client thread
     Notes
     -----
     Official documentation for the api can be found in https://exchange.blockchain.com/api/
@@ -93,7 +130,7 @@ class BcexClient(object):
         symbols,
         channels=None,
         channel_kwargs=None,
-        env=Environment.STAGING,
+        env=Environment.PROD,
         api_secret=None,
         cancel_position_on_exit=True,
     ):
@@ -133,20 +170,21 @@ class BcexClient(object):
 
         self.cancel_position_on_exit = cancel_position_on_exit
         self._error = None
-        self.authenticated = False
         self.ws_url = ws_url
         self.origin = origin_url
         self.exited = False
 
         self.symbols = symbols
         self.symbol_details = {s: {} for s in symbols}
+
         self.channels = channels or list(
             set(Channel.ALL) - {Channel.L3}
         )  # L3 not handled yet
-
         # default channel_kwargs
         self.channel_kwargs = {Channel.PRICES: {"granularity": 60}}
         self._update_default_channel_kwargs(channel_kwargs)
+
+        self.channel_status = None
 
         # webs.enableTrace(True)
         self.ws = None
@@ -159,7 +197,7 @@ class BcexClient(object):
 
         # use these dictionaries to store the data we receive
         self.balances = {}
-        self.tickers = {}
+        self.tickers = defaultdict(dict)
 
         self.l2_book = {}
         for symbol in self.symbols:
@@ -173,6 +211,9 @@ class BcexClient(object):
         self._seqnum = -1  # higher seqnum that we received (usually the latest)
         self._last_heartbeat = None
 
+        # set initial status to unsubcribed
+        self._init_channel_status()
+
     def _update_default_channel_kwargs(self, channel_kwargs):
         # override channel_kwargs with specified channel_kwargs
         if channel_kwargs is not None:
@@ -180,6 +221,20 @@ class BcexClient(object):
                 if ch not in self.channel_kwargs:
                     self.channel_kwargs[ch] = {}
                 self.channel_kwargs[ch].update(channel_kwargs)
+
+    def _init_channel_status(self):
+        """Initialise or reset channel status
+        """
+        self.channel_status = {}
+        # channels symbols specific
+        for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
+            self.channel_status[channel] = {
+                s: ChannelStatus.UNSUBSCRIBED for s in self.symbols
+            }
+
+        # channels non symbols specific
+        for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
+            self.channel_status[channel] = ChannelStatus.UNSUBSCRIBED
 
     def _check_attributes(self):
         for attr, _type in [
@@ -194,6 +249,13 @@ class BcexClient(object):
                     f"{attr} should be a {_type} not {type(getattr(self, attr))}"
                 )
 
+    @property
+    def authenticated(self):
+        return (
+            self.channel_status.get(Channel.AUTH, ChannelStatus.UNSUBSCRIBED)
+            == ChannelStatus.SUBSCRIBED
+        )
+
     def _subscribe_channels(self):
         # Public channel subscriptions - symbol specific
         self._public_subscription()
@@ -207,26 +269,68 @@ class BcexClient(object):
             )
 
     def _public_subscription(self):
-        for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
-            for i in self.symbols:
-                s = {"action": "subscribe", "channel": channel, "symbol": i}
-                kwargs = self.channel_kwargs.get(channel)
+        channels = set(self.channels).intersection(set(Channel.PUBLIC))
+        subscriptions_to_check = self._send_subscriptions_to_ws(channels)
+        self._wait_for_confirmation(subscriptions_to_check)
+
+    def _send_subscriptions_to_ws(self, channels):
+        subscriptions_to_check = []
+        for channel in channels:
+            kwargs = self.channel_kwargs.get(channel)
+            if Channel.is_symbol_specific(channel):
+                for symbol in self.symbols:
+                    subscription = {
+                        "action": Action.SUBSCRIBE,
+                        "channel": channel,
+                        "symbol": symbol,
+                    }
+                    if kwargs:
+                        subscription.update(kwargs)
+                    self.channel_status[channel][
+                        symbol
+                    ] = ChannelStatus.WAITING_CONFIRMATION
+                    logging.info(subscription)
+                    self.ws.send(json.dumps(subscription))
+                    subscriptions_to_check.append((channel, symbol))
+            else:
+                subscription = {"action": Action.SUBSCRIBE, "channel": channel}
                 if kwargs:
-                    s.update(kwargs)
+                    subscription.update(kwargs)
+                logging.info(subscription)
+                self.channel_status[channel] = ChannelStatus.WAITING_CONFIRMATION
+                self.ws.send(json.dumps(subscription))
+                subscriptions_to_check.append((channel, None))
+        return subscriptions_to_check
 
-                logging.info(s)
-                self.ws.send(json.dumps(s))
+    def _wait_for_confirmation(self, subscriptions_to_check):
+        all_answered = False
+        conn_timeout = 5
+        while not all_answered and conn_timeout:
+            time.sleep(1)
+            conn_timeout -= 1
+            all_answered = True
+            for channel, symbol in subscriptions_to_check:
+                if self.check_channel_status(
+                    ChannelStatus.WAITING_CONFIRMATION, channel, symbol
+                ):
+                    all_answered = False
+                    break
 
-        # TODO: wait for public subscriptions to be complete i.e. wait for data from each
-        # chosen channel to have retrieved some data
+        if not all_answered:
+            logging.warning("Could not subscribe to all channels")
+
+    def check_channel_status(self, status, channel, symbol=None):
+        if symbol is None:
+            return self.channel_status[channel] == status
+        else:
+            return self.channel_status[channel][symbol] == status
 
     def _private_subscription(self):
         self._authenticate()
-        for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
-            if channel == Channel.AUTH:
-                # already subscribed
-                continue
-            self.ws.send(json.dumps({"action": Action.SUBSCRIBE, "channel": channel}))
+        channels = set(self.channels).intersection(set(Channel.PRIVATE))
+        channels = channels - {Channel.AUTH}  # already subscribed
+        subscriptions_to_check = self._send_subscriptions_to_ws(channels)
+        self._wait_for_confirmation(subscriptions_to_check)
 
     def connect(self):
         """Connects to the websocket and runs it
@@ -237,10 +341,10 @@ class BcexClient(object):
             on_error=self.on_error,
             on_close=self.on_close,
             on_open=self.on_open,
-            on_ping=None,
+            on_ping=self.on_ping,
         )
         self.wst = threading.Thread(
-            target=lambda: self.ws.run_forever(origin=self.origin)
+            target=lambda: self.ws.run_forever(origin=self.origin, ping_interval=5)
         )
         self.wst.daemon = True
         self.wst.start()
@@ -271,10 +375,15 @@ class BcexClient(object):
     def on_close(self):
         """What to do when the websocket closes
         """
-        self.exit()
+        if self.cancel_position_on_exit and self.authenticated:
+            logging.info(f"Cancelling all orders before exiting")
+            self.cancel_all_orders()
+        self._init_channel_status()
         logging.warning("\n-- Websocket Closed --")
 
     def on_error(self, error):
+        """On error websocket connection
+        """
         self._on_error(error)
 
     def _on_error(self, err):
@@ -282,11 +391,37 @@ class BcexClient(object):
         logging.error(err)
         self.exit()
 
+    def on_ping(self, *args):
+        """On ping interval from WebSocket Client.
+
+        This checks health of the websocket on a regular basis
+
+        Parameters
+        ----------
+        args : list
+            unused
+        """
+        if self.channel_status[Channel.HEARTBEAT] != ChannelStatus.SUBSCRIBED:
+            return
+        now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        if self._last_heartbeat is None:
+            self._last_heartbeat = now
+        log_heartbeat = f"[{now}] Last heartbeat was {(now - self._last_heartbeat).total_seconds()} seconds ago."
+        if now - self._last_heartbeat > timedelta(seconds=10):
+            logging.error(log_heartbeat + " Exiting")
+            self.exit()
+        elif (
+            timedelta(seconds=10) >= now - self._last_heartbeat >= timedelta(seconds=5)
+        ):
+            logging.warning(log_heartbeat + " Waiting few more seconds")
+        else:
+            logging.debug(log_heartbeat)
+
     def exit(self):
-        if self.cancel_position_on_exit and self.authenticated:
-            self.cancel_all_orders()
-        self.ws.close()
+        """On exit websocket connection
+        """
         self.exited = True
+        self.ws.close()
 
     def on_message(self, msg):
         """Parses the message returned from the websocket depending on which channel returns it
@@ -343,14 +478,13 @@ class BcexClient(object):
         if seqnum > self._seqnum + 1:
             self._seqnum = seqnum
             logging.error(
-                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1}"
+                f"Missing messages with seqnums between {self._seqnum + 1} and {seqnum - 1} : Exiting"
             )
-            # TODO restart websocket connection
+            self.exit()
         elif seqnum < self._seqnum + 1:
             logging.warning(f"Received with delay message with seqnum {seqnum}")
         else:
             self._seqnum = seqnum
-            logging.debug(f"Received message with expected seqnum {seqnum}")
 
     def _on_message_unsupported(self, message):
         if message["channel"] in Channel.ALL:
@@ -364,7 +498,7 @@ class BcexClient(object):
 
     def _on_symbols_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Successfully subscribed to symbols")
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.SNAPSHOT:
             # has only one symbol per message unlike the documentation
             symbol = msg["symbol"]
@@ -379,12 +513,12 @@ class BcexClient(object):
     def _on_market_trade_updates(self, msg):
         """Handle market trades by appending to symbol trade history"""
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Successfully subscribed to trades for {msg['symbol']}")
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
             symbol = msg["symbol"]
             trades = self.market_trades[symbol]
             trade = Trade.parse_from_msg(msg)
-            self.market_trades[symbol] = _update_max_list(
+            self.market_trades[symbol] = update_max_list(
                 trades, trade, self.MAX_TRADES_LEN
             )
         else:
@@ -393,21 +527,50 @@ class BcexClient(object):
     def _on_price_updates(self, msg):
         """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
         if msg["event"] == Event.SUBSCRIBED:
-            key = msg["symbol"]
-            logging.info(f"{key} candles subscribed to.")
-            logging.info(f"{msg['symbol']} candles subscribed to.")
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
             key = msg["symbol"]
-            # TODO: what else would be inside the msg?
             if "price" in msg:
                 candles = self.candles[key]
-                self.candles[key] = _update_max_list(
+                self.candles[key] = update_max_list(
                     candles, msg["price"], self.MAX_CANDLES_LEN
                 )
+            else:
+                logging.warning(f"Received a price update without price information")
         elif msg["event"] == Event.REJECTED:
-            logging.warning(f"Price update rejected. Reason : {msg['text']}")
+            self._on_rejected_subscription_updates(msg)
         else:
             self._on_unsupported_event_message(msg, Channel.PRICES)
+
+    def _on_subscribed_updates(self, msg):
+        """When receiving an message about a confirmed subscription
+
+        Updates the internal attributes to keep track of what channels are subscribed to
+        """
+        channel = msg["channel"]
+        log = f"Successfully subscribed to channel {channel}"
+        if "symbol" in msg:
+            symbol = msg["symbol"]
+            log = f"[{symbol}] " + log
+            self.channel_status[channel][symbol] = ChannelStatus.SUBSCRIBED
+        else:
+            self.channel_status[channel] = ChannelStatus.SUBSCRIBED
+        logging.info(log)
+
+    def _on_rejected_subscription_updates(self, msg):
+        """When receiving an message about a rejected subscription
+
+        Updates the internal attributes to keep track of what channels are subscribed to
+        """
+        channel = msg["channel"]
+        log = f"Subscription to channel {channel} rejected. Reason : {msg.get('text', 'Not Provided')}"
+        if "symbol" in msg:
+            symbol = msg["symbol"]
+            log = f"[{symbol}] " + log
+            self.channel_status[channel][symbol] = ChannelStatus.REJECTED
+        else:
+            self.channel_status[channel] = ChannelStatus.REJECTED
+        logging.warning(log)
 
     def _on_unsupported_event_message(self, msg, channel):
         if msg["event"] in Event.ALL:
@@ -421,9 +584,12 @@ class BcexClient(object):
 
     def _on_ticker_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Subscribed to the {msg['channel']} channel")
-        elif "last_trade_price" in msg:
-            self.tickers[msg["symbol"]] = msg["last_trade_price"]
+            self._on_subscribed_updates(msg)
+        elif msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
+            # last_trade_price not always present
+            for k in ["last_trade_price", "price_24h", "volume_24h"]:
+                if k in msg:
+                    self.tickers[msg["symbol"]].update({k: msg[k]})
         else:
             self._on_unsupported_event_message(msg, Channel.TICKER)
 
@@ -434,9 +600,7 @@ class BcexClient(object):
             # We should clear existing levels
             self.l2_book[symbol] = {Book.BID: sd(), Book.ASK: sd()}
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(
-                f"Subscribed to the {msg['channel']} channel for symbol {symbol}"
-            )
+            self._on_subscribed_updates(msg)
         elif msg["event"] in [Event.SNAPSHOT, Event.UPDATED]:
             for book in [Book.BID, Book.ASK]:
                 updates = msg[book]
@@ -462,7 +626,7 @@ class BcexClient(object):
 
     def _on_heartbeat_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Subscribed to the {msg['channel']} channel")
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
             self._last_heartbeat = valid_datetime(msg["timestamp"])
             logging.debug(f"Updated last heartbeat to {self._last_heartbeat}")
@@ -471,18 +635,18 @@ class BcexClient(object):
 
     def _on_auth_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
-            self.authenticated = True
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.REJECTED:
             if self.authenticated:
                 logging.warning("Trying To Authenticate while already authenticated")
                 return
-            raise ValueError("Failed to authenticate")
+            self._on_rejected_subscription_updates(msg)
         else:
             self._on_unsupported_event_message(msg, Channel.AUTH)
 
     def _on_balance_updates(self, msg):
         if msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Subscribed to the {msg['channel']} channel")
+            self._on_subscribed_updates(msg)
         elif msg["event"] == Event.SNAPSHOT:
             self.balances = parse_balance(msg["balances"])
         else:
@@ -497,7 +661,7 @@ class BcexClient(object):
         elif msg["event"] == Event.REJECTED:
             self._on_order_rejection(msg)
         elif msg["event"] == Event.SUBSCRIBED:
-            logging.info(f"Subscribed to the {msg['channel']} channel")
+            self._on_subscribed_updates(msg)
         else:
             self._on_unsupported_event_message(msg, Channel.TRADING)
 
@@ -516,8 +680,11 @@ class BcexClient(object):
             self._on_order_update(mo)
 
     def _on_order_rejection(self, msg):
-        # TODO: handle outgoing orders - those without orderID yet
-        logging.info(f"Removing {msg['orderID']} from open orders")
+        if self.channel_status[Channel.TRADING] == ChannelStatus.SUBSCRIBED:
+            # TODO: handle outgoing orders - those without orderID yet
+            logging.info(f"Removing {msg['orderID']} from open orders")
+        else:
+            self._on_rejected_subscription_updates(msg)
 
     def cancel_order(self, order_id):
         return self.send_order(Order(OrderType.CANCEL, order_id=order_id))
