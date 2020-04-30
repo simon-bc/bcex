@@ -80,10 +80,6 @@ class Order:
                 raise ValueError(
                     "Must have symbol for order type {}".format(self.order_type)
                 )
-            if self.time_in_force is None:
-                raise ValueError(
-                    "Must have time_in_force for order type {}".format(self.order_type)
-                )
             if self.side is None:
                 raise ValueError(
                     "Must have side for order type {}".format(self.order_type)
@@ -97,6 +93,24 @@ class Order:
             if self.price is None:
                 raise ValueError(
                     "Must have price for order type {}".format(self.order_type)
+                )
+
+            if self.time_in_force is None:
+                raise ValueError(
+                    "Must have time_in_force for order type {}".format(self.order_type)
+                )
+
+        if self.order_type in [OrderType.MARKET]:
+            if self.price is not None:
+                raise ValueError(
+                    "Cannot have price for order type {}".format(self.order_type)
+                )
+
+            if self.time_in_force is not None:
+                raise ValueError(
+                    "Cannot have time_in_force for order type {}".format(
+                        self.order_type
+                    )
                 )
 
         if self.time_in_force == TimeInForce.GTD:
