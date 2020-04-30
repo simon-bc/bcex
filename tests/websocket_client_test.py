@@ -1,5 +1,4 @@
-import pytest
-from core.websocket_client import BcexClient
+from core.websocket_client import BcexClient, ChannelStatus
 from iso8601 import iso8601
 from sortedcontainers import SortedDict
 
@@ -196,8 +195,9 @@ class TestBcexClientPriceUpdates(object):
             "text": "Authentication Failed",
         }
 
-        with pytest.raises(ValueError):
-            client._on_auth_updates(msg)
+        client._on_auth_updates(msg)
+
+        assert client.channel_status["auth"] == ChannelStatus.REJECTED
 
     def test_on_balance_updates(self):
         client = BcexClient(symbols=["BTC-USD"])
@@ -321,7 +321,7 @@ class TestBcexClientPriceUpdates(object):
         assert client.open_orders["BTC-USD"].get("12891851020") is None
 
     def test_on_ticker_updates(self):
-        client = BcexClient(Mock())
+        client = BcexClient(symbols=["BTC-USD"])
 
         # snapshot event - with last_trade_price
         msg_1 = {
