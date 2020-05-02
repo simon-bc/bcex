@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from core.utils import update_max_list, valid_datetime
+from bcex.core.utils import update_max_list, valid_datetime
 
 
 class TestUtils(object):

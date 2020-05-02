@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 import pytz
 import websocket as webs
-from core.order_response import OrderResponse, OrderStatus
-from core.orders import Order, OrderType
-from core.trade import Trade
-from core.utils import update_max_list, valid_datetime
+from bcex.core.order_response import OrderResponse, OrderStatus
+from bcex.core.orders import Order, OrderType
+from bcex.core.trade import Trade
+from bcex.core.utils import update_max_list, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed

@@ -1,9 +1,9 @@
 from unittest.mock import Mock, patch
 
-from core.exchange_interface import ExchangeInterface
-from core.orders import OrderSide
-from core.symbol import Symbol
-from core.websocket_client import Channel, Environment, MockBcexClient
+from bcex.core.exchange_interface import ExchangeInterface
+from bcex.core.orders import OrderSide
+from bcex.core.symbol import Symbol
+from bcex.core.websocket_client import Channel, Environment, MockBcexClient
 
 
 class TestExchangeInterface:
