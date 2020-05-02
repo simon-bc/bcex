@@ -2,6 +2,17 @@ from bcex.core.orders import OrderSide
 
 
 class Trade:
+    """
+    Attributes
+    ----------
+    symbol: str from enum Symbol
+    price: float
+    quantity: float
+    side: str from enum OrderSide
+    timestamp: str
+    trade_id: str
+    """
+
     def __init__(self, symbol, price, quantity, side, timestamp, trade_id=None):
         self.symbol = symbol
         self.price = price
