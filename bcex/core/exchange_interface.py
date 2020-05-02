@@ -60,7 +60,7 @@ class ExchangeInterface:
         signal.signal(signal.SIGTERM, self.exit)
 
     def connect(self):
-        """Connects to the Blockchain Exchange Websocket"""
+        """Connects to the Blockchain.com Exchange Websocket"""
         # TODO: ensure that we are connected before moving forward
         self.ws.connect()
 
@@ -70,7 +70,7 @@ class ExchangeInterface:
 
     def is_open(self):
         """Check that websockets are still open."""
-        return not self.ws.exited
+        return self.ws is not None and not self.ws.exited
 
     @staticmethod
     def _scale_quantity(symbol_details, quantity):
@@ -192,6 +192,9 @@ class ExchangeInterface:
         -------
         tick_size : float
         """
+        if not self._has_symbol_details(symbol):
+            return None
+
         details = self.ws.symbol_details[symbol]
         return (
             details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
@@ -208,6 +211,9 @@ class ExchangeInterface:
         -------
         lot_size : float
         """
+        if not self._has_symbol_details(symbol):
+            return None
+
         details = self.ws.symbol_details[symbol]
         return details["min_order_size"] / 10 ** details["min_order_size_scale"]
 
@@ -251,7 +257,9 @@ class ExchangeInterface:
         order : Order
             order
         """
-        # assumes websocket has subscribed to symbol details of this symbol
+        if not self._has_symbol_details(symbol):
+            return None
+
         symbol_details = self.ws.symbol_details[symbol]
         quantity = self._scale_quantity(symbol_details, quantity)
         if not self._check_quantity_within_limits(symbol_details, quantity):
@@ -316,16 +324,7 @@ class ExchangeInterface:
             check if balance is sufficient for order
 
         """
-        if symbol not in self.ws.symbols:
-            logging.error(
-                f"Cannot place an order for symbol {symbol}. You need to subscribe to the symbol first"
-            )
-            return
-        if symbol not in self.ws.symbol_details:
-            logging.warning(
-                f"Could not find symbol details for {symbol}. Make sure the symbol was successfully "
-                f"subscribed to."
-            )
+        if not self._has_symbol_details(symbol):
             return
 
         order = self._create_order(
@@ -342,6 +341,20 @@ class ExchangeInterface:
         )
         if order is not False:
             self.ws.send_order(order)
+
+    def _has_symbol_details(self, symbol):
+        if symbol in self.ws.symbol_details:
+            return True
+        else:
+            # log why
+            if self.ws.channel_status[Channel.SYMBOLS][symbol] == "subscribed":
+                logging.error(
+                    f"Could not find symbol details for {symbol} even if we subscribed to it. Might come later ?"
+                )
+            else:
+                logging.warning(
+                    f"Could not find symbol details for symbol {symbol}. Websocket it is not subscribed to it"
+                )
 
     def cancel_all_orders(self):
         """Cancel all orders
