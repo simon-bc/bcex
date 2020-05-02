@@ -1,56 +1,25 @@
-from collections import defaultdict
+from unittest.mock import Mock, patch
 
 from core.exchange_interface import ExchangeInterface
 from core.orders import OrderSide
 from core.symbol import Symbol
-from core.websocket_client import Channel, Environment
-from sortedcontainers import SortedDict as sd
-
-
-class MockWebsocketClient:
-    def __init__(
-        self,
-        symbols,
-        channels=None,
-        channel_kwargs=None,
-        env=Environment.STAGING,
-        api_secret=None,
-    ):
-        self.authenticated = False
-
-        self.symbols = symbols
-        self.symbol_details = {s: {} for s in symbols}
-        self.channels = channels or Channel.ALL
-        self.channel_kwargs = channel_kwargs or {}
-
-        self._api_secret = api_secret
-
-        # use these dictionaries to store the data we receive
-        self.balances = {}
-        self.tickers = {}
-
-        self.l2_book = {}
-        for symbol in self.symbols:
-            self.l2_book[symbol] = {"bids": sd(), "asks": sd()}
-
-        self.candles = defaultdict(list)
-        self.market_trades = defaultdict(list)
-        self.open_orders = defaultdict(dict)
-
-    def connect(self):
-        pass
-
-    def close(self):
-        pass
-
-    def exit(self):
-        pass
-
-
-# TODO be consistent with floor / rounding / ceils
+from core.websocket_client import Channel, Environment, MockBcexClient
 
 
 class TestExchangeInterface:
+    @patch("bcex.bcex.core.exchange_interface.BcexClient", return_value=Mock())
+    def test_init(self, mock_client):
+        exi = ExchangeInterface(
+            [Symbol.ETHBTC, Symbol.BTCPAX],
+            api_secret="14567",
+            env=Environment.STAGING,
+            channels=None,
+            channels_kwargs={Channel.PRICES: {"granularity": 60}},
+            cancel_position_on_exit=False,
+        )
+        assert exi.ws.call_count == 1
+        assert exi.ws.call_args[0][0] == [Symbol.ETHBTC, Symbol.BTCPAX]
+
     def test_scale_quantity(self):
         ins_details = {
             "base_currency_scale": 2,
@@ -85,7 +54,7 @@ class TestExchangeInterface:
     def test_check_available_balance(self):
 
         exi = ExchangeInterface(symbols=[Symbol.BTCUSD])
-        exi.ws = MockWebsocketClient(symbols=[Symbol.BTCUSD])
+        exi.ws = MockBcexClient(symbols=[Symbol.BTCUSD])
         exi.ws.balances = {"BTC": {"available": 1}, "USD": {"available": 1000}}
         ins_details = {
             "symbol": "BTC-USD",
@@ -100,7 +69,7 @@ class TestExchangeInterface:
 
     def test_get_last_traded_price(self):
         exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
-        exi.ws = MockWebsocketClient(symbols=[Symbol.BTCUSD])
+        exi.ws = MockBcexClient(symbols=[Symbol.ETHBTC])
 
         exi.ws.tickers = {}
         act = exi.get_last_traded_price(Symbol.ETHBTC)
@@ -119,3 +88,31 @@ class TestExchangeInterface:
         }
         act = exi.get_last_traded_price(Symbol.ETHBTC)
         assert act == 20.120
+
+    def test_connect(self):
+        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi.ws = MockBcexClient(symbols=[Symbol.ETHBTC])
+        exi.ws.connect = Mock()
+
+        exi.connect()
+        assert exi.ws.connect.call_count == 1
+
+    def test_exit(self):
+        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi.ws = MockBcexClient(symbols=[Symbol.ETHBTC])
+        exi.ws.exit = Mock()
+
+        exi.exit()
+        assert exi.ws.exit.call_count == 1
+
+    def test_is_open(self):
+        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi.ws = None
+
+        assert not exi.is_open()
+
+        exi.ws = MockBcexClient(symbols=[Symbol.ETHBTC])
+        assert exi.is_open()
+
+        exi.ws.exited = True
+        assert not exi.is_open()

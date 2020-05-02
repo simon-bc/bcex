@@ -134,7 +134,7 @@ class BcexClient(object):
         api_secret=None,
         cancel_position_on_exit=True,
     ):
-        """This class connects to the PIT websocket client
+        """This class connects to the Blockchain.com Exchange websocket client
 
         Parameters
         ----------
@@ -756,6 +756,20 @@ class BcexClient(object):
             )
 
         logging.info("Successfully authenticated")
+
+
+class MockBcexClient(BcexClient):
+    """Mock Bcex Client which does not actually connects to the websocket
+    """
+
+    def connect(self):
+        pass
+
+    def close(self):
+        pass
+
+    def exit(self):
+        pass
 
 
 if __name__ == "__main__":
