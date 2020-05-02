@@ -11,7 +11,7 @@ import websocket as webs
 from core.order_response import OrderResponse, OrderStatus
 from core.orders import Order, OrderType
 from core.trade import Trade
-from core.utils import parse_balance, update_max_list, valid_datetime
+from core.utils import update_max_list, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -525,7 +525,7 @@ class BcexClient(object):
             self._on_unsupported_event_message(msg, Channel.TRADES)
 
     def _on_price_updates(self, msg):
-        """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
+        """Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
         if msg["event"] == Event.SUBSCRIBED:
             self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
@@ -648,7 +648,10 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             self._on_subscribed_updates(msg)
         elif msg["event"] == Event.SNAPSHOT:
-            self.balances = parse_balance(msg["balances"])
+            self.balances = {
+                b["currency"]: {"available": b["available"], "balance": b["balance"]}
+                for b in msg["balances"]
+            }
         else:
             self._on_unsupported_event_message(msg, Channel.BALANCES)
 
