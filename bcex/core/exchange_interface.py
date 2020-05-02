@@ -12,7 +12,7 @@ class ExchangeInterface:
 
     Attributes
     ----------
-    ws: BcexClient
+    client: BcexClient
         websocket client to handle interactions with the exchange
     """
 
@@ -24,7 +24,7 @@ class ExchangeInterface:
         api_secret=None,
         env=Environment.STAGING,
         channels=None,
-        channels_kwargs=None,
+        channel_kwargs=None,
         cancel_position_on_exit=True,
     ):
         """
@@ -48,10 +48,10 @@ class ExchangeInterface:
             # make sure we include the required channels
             channels = list(set(self.REQUIRED_CHANNELS + channels))
 
-        self.ws = BcexClient(
+        self.client = BcexClient(
             symbols,
             channels=channels,
-            channel_kwargs=channels_kwargs,
+            channel_kwargs=channel_kwargs,
             api_secret=api_secret,
             env=env,
             cancel_position_on_exit=cancel_position_on_exit,
@@ -62,15 +62,15 @@ class ExchangeInterface:
     def connect(self):
         """Connects to the Blockchain.com Exchange Websocket"""
         # TODO: ensure that we are connected before moving forward
-        self.ws.connect()
+        self.client.connect()
 
     def exit(self):
         """Closes Websocket"""
-        self.ws.exit()
+        self.client.exit()
 
     def is_open(self):
         """Check that websockets are still open."""
-        return self.ws is not None and not self.ws.exited
+        return self.client.ws is not None and not self.client.exited
 
     @staticmethod
     def _scale_quantity(symbol_details, quantity):
@@ -195,7 +195,7 @@ class ExchangeInterface:
         if not self._has_symbol_details(symbol):
             return None
 
-        details = self.ws.symbol_details[symbol]
+        details = self.client.symbol_details[symbol]
         return (
             details["min_price_increment"] / 10 ** details["min_price_increment_scale"]
         )
@@ -214,7 +214,7 @@ class ExchangeInterface:
         if not self._has_symbol_details(symbol):
             return None
 
-        details = self.ws.symbol_details[symbol]
+        details = self.client.symbol_details[symbol]
         return details["min_order_size"] / 10 ** details["min_order_size_scale"]
 
     def _create_order(
@@ -254,16 +254,17 @@ class ExchangeInterface:
 
         Returns
         -------
-        order : Order
-            order
+        order : Order or None
+            Order if we could create the order with the provided details
+            None if we could not
         """
         if not self._has_symbol_details(symbol):
             return None
 
-        symbol_details = self.ws.symbol_details[symbol]
+        symbol_details = self.client.symbol_details[symbol]
         quantity = self._scale_quantity(symbol_details, quantity)
         if not self._check_quantity_within_limits(symbol_details, quantity):
-            return False
+            return None
         if price is not None:
             price = self._scale_price(symbol_details, price)
         if check_balance and order_type == OrderType.LIMIT:
@@ -271,7 +272,7 @@ class ExchangeInterface:
                 symbol_details, side, quantity, price
             )
             if not has_balance:
-                return False
+                return None
         return Order(
             order_type=order_type,
             symbol=symbol,
@@ -339,21 +340,27 @@ class ExchangeInterface:
             stop_price,
             check_balance,
         )
-        if order is not False:
-            self.ws.send_order(order)
+        if order is not None:
+            self.client.send_order(order)
 
     def _has_symbol_details(self, symbol):
-        if symbol in self.ws.symbol_details:
+        if (
+            symbol in self.client.symbol_details
+            and len(self.client.symbol_details[symbol]) > 0
+        ):
             return True
         else:
             # log why
-            if self.ws.channel_status[Channel.SYMBOLS][symbol] == "subscribed":
-                logging.error(
-                    f"Could not find symbol details for {symbol} even if we subscribed to it. Might come later ?"
-                )
-            else:
+            if (
+                symbol not in self.client.channel_status[Channel.SYMBOLS]
+                or self.client.channel_status[Channel.SYMBOLS][symbol] != "subscribed"
+            ):
                 logging.warning(
                     f"Could not find symbol details for symbol {symbol}. Websocket it is not subscribed to it"
+                )
+            else:
+                logging.error(
+                    f"Could not find symbol details for {symbol} even if we subscribed to it. Might come later ?"
                 )
 
     def cancel_all_orders(self):
@@ -363,7 +370,7 @@ class ExchangeInterface:
         -----
         This also cancels the orders for symbols which are not in self.symbols
         """
-        self.ws.cancel_all_orders()
+        self.client.cancel_all_orders()
         # TODO: wait for a response that all orders have been cancelled - MAX_TIMEOUT then warn/err
 
     def cancel_order(self, order_id):
@@ -375,7 +382,7 @@ class ExchangeInterface:
             order id to cancel
 
         """
-        self.ws.send_order(
+        self.client.send_order(
             Order(
                 OrderType.CANCEL,
                 order_id=order_id,
@@ -391,7 +398,7 @@ class ExchangeInterface:
         symbol : Symbol
 
         """
-        order_ids = self.ws.open_orders[symbol].keys()
+        order_ids = self.client.open_orders[symbol].keys()
         for o in order_ids:
             self.cancel_order(o)
 
@@ -407,7 +414,7 @@ class ExchangeInterface:
         last_traded_price : float
             last matched price for symbol
         """
-        return self.ws.tickers.get(symbol, {}).get("last_trade_price")
+        return self.client.tickers.get(symbol, {}).get("last_trade_price")
 
     def get_ask_price(self, symbol):
         """Get the ask price for the given symbol
@@ -422,7 +429,7 @@ class ExchangeInterface:
             ask price for symbol
         """
         # sorted dict - first key is lowest price
-        book = self.ws.l2_book[symbol][Book.ASK]
+        book = self.client.l2_book[symbol][Book.ASK]
         return book.peekitem(0) if len(book) > 0 else None
 
     def get_bid_price(self, symbol):
@@ -438,7 +445,7 @@ class ExchangeInterface:
             bid price for symbol
         """
         # sorted dict - last key is highest price
-        book = self.ws.l2_book[symbol][Book.BID]
+        book = self.client.l2_book[symbol][Book.BID]
         return book.peekitem(-1) if len(book) > 0 else None
 
     def get_all_open_orders(self, symbols=None, to_dict=False):
@@ -457,9 +464,9 @@ class ExchangeInterface:
         """
         open_orders = {}
         if symbols is None:
-            symbols = self.ws.open_orders.keys()
+            symbols = self.client.open_orders.keys()
         for i in symbols:
-            open_orders.update(self.ws.open_orders[i])
+            open_orders.update(self.client.open_orders[i])
         if to_dict:
             return {k: o.to_dict() for k, o in open_orders.items()}
         else:
@@ -483,10 +490,10 @@ class ExchangeInterface:
         if symbol is not None:
             symbols = [symbol]
         else:
-            symbols = self.ws.open_orders.keys()
+            symbols = self.client.open_orders.keys()
 
         for i in symbols:
-            order_details = self.ws.open_orders[i].get(order_id)
+            order_details = self.client.open_orders[i].get(order_id)
             if order_details is not None:
                 return order_details
 
@@ -498,15 +505,15 @@ class ExchangeInterface:
         -------
         float: the available balance of the coin
         """
-        return self.ws.balances.get(coin, {}).get("available", 0)
+        return self.client.balances.get(coin, {}).get("available", 0)
 
     def get_balances(self):
         """Get user balances"""
-        return self.ws.balances
+        return self.client.balances
 
     def get_symbols(self):
         """Get all the symbols"""
-        return self.ws.symbols
+        return self.client.symbols
 
 
 if __name__ == "__main__":

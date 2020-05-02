@@ -114,6 +114,7 @@ class BcexClient(object):
          - for symbol specific channels, the value is a dict with key the symbol, str from the enum Symbol
             and value the status, str from the enum ChannelStatus
          - for non-symbol specific channels, the value is the status, str from the enum ChannelStatus
+    tickers: dict
     ws: WebSocketClient
     wst: Thread
         websocket client thread
