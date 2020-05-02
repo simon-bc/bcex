@@ -1,5 +1,5 @@
 import pytest
-from bcex_core.orders import Order, OrderSide, OrderType, TimeInForce
+from core.orders import Order, OrderSide, OrderType, TimeInForce
 
 
 class TestOrder(object):

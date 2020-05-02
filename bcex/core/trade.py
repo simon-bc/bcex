@@ -1,4 +1,4 @@
-from bcex_core.orders import OrderSide
+from core.orders import OrderSide
 
 
 class Trade:

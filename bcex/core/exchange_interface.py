@@ -3,8 +3,8 @@ import logging
 import math
 import signal
 
-from bcex_core.orders import Order, OrderSide, OrderType, TimeInForce
-from bcex_core.websocket_client import BcexClient, Book, Channel, Environment
+from core.orders import Order, OrderSide, OrderType, TimeInForce
+from core.websocket_client import BcexClient, Book, Channel, Environment
 
 
 class ExchangeInterface:

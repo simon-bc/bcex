@@ -1,9 +1,9 @@
 import logging
 
-from bcex_core.exchange_interface import ExchangeInterface
-from bcex_core.symbol import Symbol
-from bcex_core.websocket_client import Channel, Environment
-from bcex_examples.quote_both_sides import quote_randomly_both_sides_interface
+from core.exchange_interface import ExchangeInterface
+from core.symbol import Symbol
+from core.websocket_client import Channel, Environment
+from examples.quote_both_sides import quote_randomly_both_sides_interface
 from websocket import WebSocketConnectionClosedException
 
 order_quantity_map = {Symbol.ETHBTC: 0.024, Symbol.BTCUSD: 0.001}

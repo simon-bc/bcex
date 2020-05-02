@@ -1,9 +1,9 @@
 from collections import defaultdict
 
-from bcex_core.exchange_interface import ExchangeInterface
-from bcex_core.orders import OrderSide
-from bcex_core.symbol import Symbol
-from bcex_core.websocket_client import Channel, Environment
+from core.exchange_interface import ExchangeInterface
+from core.orders import OrderSide
+from core.symbol import Symbol
+from core.websocket_client import Channel, Environment
 from sortedcontainers import SortedDict as sd
 
 
