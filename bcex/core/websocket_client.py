@@ -404,7 +404,7 @@ class BcexClient(object):
         """
         if self.channel_status[Channel.HEARTBEAT] != ChannelStatus.SUBSCRIBED:
             return
-        now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        now = datetime.now(pytz.UTC)
         if self._last_heartbeat is None:
             self._last_heartbeat = now
         log_heartbeat = f"[{now}] Last heartbeat was {(now - self._last_heartbeat).total_seconds()} seconds ago."
