@@ -411,11 +411,11 @@ class BcexClient(object):
             logging.error(log_heartbeat + " Exiting")
             self.exit()
         elif (
-            timedelta(seconds=100) >= now - self._last_heartbeat >= timedelta(seconds=5)
+            timedelta(seconds=10) >= now - self._last_heartbeat >= timedelta(seconds=5)
         ):
             logging.warning(log_heartbeat + " Waiting few more seconds")
         else:
-            logging.debug(log_heartbeat,)
+            logging.debug(log_heartbeat)
 
     def exit(self):
         """On exit websocket connection

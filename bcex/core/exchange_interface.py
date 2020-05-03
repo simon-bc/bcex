@@ -16,8 +16,6 @@ class ExchangeInterface:
         websocket client to handle interactions with the exchange
     """
 
-    ORDER_BOOK_DEPTH = 10
-
     REQUIRED_CHANNELS = [
         Channel.SYMBOLS,
         Channel.TICKER,
