@@ -3,17 +3,28 @@ import os
 import sys
 import time
 
-from core.exchange_interface import ExchangeInterface
-from core.orders import OrderSide, OrderType, TimeInForce
-from core.websocket_client import Channel, Environment
+from bcex.core.exchange_interface import ExchangeInterface
+from bcex.core.orders import OrderSide, OrderType, TimeInForce
+from bcex.core.websocket_client import Channel, Environment
 
 
 class BaseTrader:
     CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS]
 
-    def __init__(self, symbol, api_key=None, env=Environment.STAGING, refresh_rate=5):
+    def __init__(
+        self,
+        symbol,
+        api_key=None,
+        env=Environment.STAGING,
+        refresh_rate=5,
+        channels_kwargs=None,
+    ):
         self.exchange = ExchangeInterface(
-            [symbol], api_secret=api_key, env=env, channels=self.CHANNELS
+            [symbol],
+            api_secret=api_key,
+            env=env,
+            channels=self.CHANNELS,
+            channels_kwargs=channels_kwargs,
         )
         self.exchange.connect()
         self._symbol = symbol

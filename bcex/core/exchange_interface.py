@@ -3,8 +3,8 @@ import logging
 import math
 import signal
 
-from core.orders import Order, OrderSide, OrderType, TimeInForce
-from core.websocket_client import BcexClient, Book, Channel, Environment
+from bcex.core.orders import Order, OrderSide, OrderType, TimeInForce
+from bcex.core.websocket_client import BcexClient, Book, Channel, Environment
 
 
 class ExchangeInterface:
@@ -16,7 +16,14 @@ class ExchangeInterface:
         websocket client to handle interactions with the exchange
     """
 
-    REQUIRED_CHANNELS = [Channel.SYMBOLS, Channel.TICKER, Channel.TRADES]
+    ORDER_BOOK_DEPTH = 10
+
+    REQUIRED_CHANNELS = [
+        Channel.SYMBOLS,
+        Channel.TICKER,
+        Channel.TRADES,
+        Channel.HEARTBEAT,
+    ]
 
     def __init__(
         self,
@@ -487,6 +494,19 @@ class ExchangeInterface:
         """
         return self.ws.balances.get(coin, {}).get("available", 0)
 
+    def get_order_book(self, symbol):
+        """Get full order book for
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        order_book : Dict
+        """
+        return self.ws.l2_book[symbol]
+
     def get_balances(self):
         """Get user balances"""
         return self.ws.balances
@@ -494,6 +514,20 @@ class ExchangeInterface:
     def get_symbols(self):
         """Get all the symbols"""
         return self.ws.symbols
+
+    def get_candles(self, symbol):
+        """Get candles for symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        candles : list
+            list of candles at timestamp
+        """
+        return self.ws.candles[symbol]
 
 
 if __name__ == "__main__":

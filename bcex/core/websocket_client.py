@@ -8,10 +8,10 @@ from datetime import datetime, timedelta
 
 import pytz
 import websocket as webs
-from core.order_response import OrderResponse, OrderStatus
-from core.orders import Order, OrderType
-from core.trade import Trade
-from core.utils import parse_balance, update_max_list, valid_datetime
+from bcex.core.order_response import OrderResponse, OrderStatus
+from bcex.core.orders import Order, OrderType
+from bcex.core.trade import Trade
+from bcex.core.utils import parse_balance, update_max_list, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -411,11 +411,11 @@ class BcexClient(object):
             logging.error(log_heartbeat + " Exiting")
             self.exit()
         elif (
-            timedelta(seconds=10) >= now - self._last_heartbeat >= timedelta(seconds=5)
+            timedelta(seconds=100) >= now - self._last_heartbeat >= timedelta(seconds=5)
         ):
             logging.warning(log_heartbeat + " Waiting few more seconds")
         else:
-            logging.debug(log_heartbeat)
+            logging.debug(log_heartbeat,)
 
     def exit(self):
         """On exit websocket connection
@@ -609,7 +609,7 @@ class BcexClient(object):
                     price = data["px"]
                     size = data["qty"]
                     if size == 0.0:
-                        logging.info(f"removing {price}:{size}")
+                        logging.debug(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
                     else:
                         self.l2_book[symbol][book][price] = size
@@ -617,9 +617,9 @@ class BcexClient(object):
             self._on_unsupported_event_message(msg, Channel.L2)
 
         if len(self.l2_book[symbol][Book.ASK]) > 0:
-            logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
+            logging.debug(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
         if len(self.l2_book[symbol][Book.BID]) > 0:
-            logging.info(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
+            logging.debug(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
 
     def _on_l3_updates(self, msg):
         logging.debug(msg)
