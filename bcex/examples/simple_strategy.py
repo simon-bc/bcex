@@ -136,7 +136,9 @@ class SimpleStrategy(BaseTrader):
         return df
 
     def place_order_at_crossover(self, df):
-        df["closing_prices_rolling_average"] = df.close.rolling(self.rolling_window).mean()
+        df["closing_prices_rolling_average"] = df.close.rolling(
+            self.rolling_window
+        ).mean()
         df["close_over_rolling_average"] = df.close > df.closing_prices_rolling_average
         last_row = df.iloc[-1]
         last_side_over = last_row.close_over_rolling_average
@@ -155,7 +157,7 @@ class SimpleStrategy(BaseTrader):
                 quantity=balance * self.balance_percentage,
                 price=moving_average,
                 side=OrderSide.SELL,
-                check_balance=True
+                check_balance=True,
             )
         else:
             ask_price = self.exchange.get_ask_price(self.symbol)
@@ -169,7 +171,7 @@ class SimpleStrategy(BaseTrader):
                 quantity=(balance * self.balance_percentage) / moving_average,
                 price=moving_average,
                 side=OrderSide.BUY,
-                check_balance=True
+                check_balance=True,
             )
 
     def is_new_candle(self, candles):
