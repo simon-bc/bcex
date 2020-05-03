@@ -2,6 +2,7 @@ import json
 from datetime import datetime, timedelta
 from unittest.mock import Mock, patch
 
+import pytest
 import pytz
 from bcex.core.symbol import Symbol
 from bcex.core.websocket_client import BcexClient, Channel, ChannelStatus, Event
@@ -9,7 +10,27 @@ from iso8601 import iso8601
 from sortedcontainers import SortedDict
 
 
-class TestBcexClientPriceUpdates(object):
+class TestChannel:
+    @pytest.mark.parametrize(
+        "channel, is_symbol_specific",
+        [
+            (Channel.HEARTBEAT, False),
+            (Channel.SYMBOLS, True),
+            (Channel.BALANCES, False),
+            (Channel.AUTH, False),
+            (Channel.PRICES, True),
+            (Channel.TICKER, True),
+            (Channel.TRADES, True),
+            (Channel.L2, True),
+            (Channel.L3, True),
+            (Channel.TRADING, False),
+        ],
+    )
+    def test_is_symbol_specific(self, channel, is_symbol_specific):
+        assert Channel.is_symbol_specific(channel) == is_symbol_specific
+
+
+class TestBcexClient:
     def test_on_price_updates(self):
         client = BcexClient(symbols=["BTC-USD"])
 

@@ -212,7 +212,7 @@ class BcexClient(object):
         self._seqnum = -1  # higher seqnum that we received (usually the latest)
         self._last_heartbeat = None
 
-        # set initial status to unsubcribed
+        # set initial status to unsubscribed
         self._init_channel_status()
 
     def _update_default_channel_kwargs(self, channel_kwargs):
@@ -227,15 +227,14 @@ class BcexClient(object):
         """Initialise or reset channel status
         """
         self.channel_status = {}
-        # channels symbols specific
-        for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
-            self.channel_status[channel] = {
-                s: ChannelStatus.UNSUBSCRIBED for s in self.symbols
-            }
 
-        # channels non symbols specific
-        for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
-            self.channel_status[channel] = ChannelStatus.UNSUBSCRIBED
+        for channel in Channel.ALL:
+            if Channel.is_symbol_specific(channel):
+                self.channel_status[channel] = {
+                    s: ChannelStatus.UNSUBSCRIBED for s in self.symbols
+                }
+            else:
+                self.channel_status[channel] = ChannelStatus.UNSUBSCRIBED
 
     def _check_attributes(self):
         for attr, _type in [
