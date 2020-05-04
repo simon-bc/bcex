@@ -295,7 +295,6 @@ class BcexClient(object):
             else:
                 subscription = {"action": Action.SUBSCRIBE, "channel": channel}
                 if kwargs:
-                    print(kwargs)
                     subscription.update(kwargs)
                 logging.info(subscription)
                 self.channel_status[channel] = ChannelStatus.WAITING_CONFIRMATION
