@@ -3,9 +3,9 @@ import os
 import sys
 import time
 
-from core.exchange_interface import ExchangeInterface
-from core.orders import OrderSide, OrderType, TimeInForce
-from core.websocket_client import Channel, Environment
+from bcex.core.exchange_interface import ExchangeInterface
+from bcex.core.orders import OrderSide, OrderType, TimeInForce
+from bcex.core.websocket_client import Channel, Environment
 
 
 class BaseTrader:

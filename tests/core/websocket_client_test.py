@@ -1,9 +1,36 @@
-from core.websocket_client import BcexClient, ChannelStatus
+import json
+from datetime import datetime, timedelta
+from unittest.mock import Mock, patch
+
+import pytest
+import pytz
+from bcex.core.symbol import Symbol
+from bcex.core.websocket_client import BcexClient, Channel, ChannelStatus, Event
 from iso8601 import iso8601
 from sortedcontainers import SortedDict
 
 
-class TestBcexClientPriceUpdates(object):
+class TestChannel:
+    @pytest.mark.parametrize(
+        "channel, is_symbol_specific",
+        [
+            (Channel.HEARTBEAT, False),
+            (Channel.SYMBOLS, True),
+            (Channel.BALANCES, False),
+            (Channel.AUTH, False),
+            (Channel.PRICES, True),
+            (Channel.TICKER, True),
+            (Channel.TRADES, True),
+            (Channel.L2, True),
+            (Channel.L3, True),
+            (Channel.TRADING, False),
+        ],
+    )
+    def test_is_symbol_specific(self, channel, is_symbol_specific):
+        assert Channel.is_symbol_specific(channel) == is_symbol_specific
+
+
+class TestBcexClient:
     def test_on_price_updates(self):
         client = BcexClient(symbols=["BTC-USD"])
 
@@ -355,3 +382,133 @@ class TestBcexClientPriceUpdates(object):
         assert (
             client.tickers["BTC-USD"]["last_trade_price"] == 7499.0
         )  # from previous update
+
+    def test_on_unsupported_event_message(self):
+        client = BcexClient([Symbol.ALGOUSD])
+        client._on_unsupported_event_message(
+            {"event": Event.SNAPSHOT}, Channel.HEARTBEAT
+        )
+        client._on_unsupported_event_message(
+            {"event": "dummy_event"}, Channel.HEARTBEAT
+        )
+
+    def test_on_message_unsupported(self):
+        client = BcexClient([Symbol.ALGOUSD])
+        client._on_message_unsupported({"channel": Event.SNAPSHOT})
+        client._on_message_unsupported({"channel": "dummy_channel"})
+
+    def test_on_message(self):
+        client = BcexClient([Symbol.ALGOUSD])
+        client._check_message_seqnum = Mock()
+        channels = [
+            "dummy_channel",
+            Channel.TRADES,
+            Channel.TICKER,
+            Channel.PRICES,
+            Channel.AUTH,
+            Channel.BALANCES,
+            Channel.HEARTBEAT,
+            Channel.SYMBOLS,
+            Channel.L2,
+            Channel.L3,
+        ]
+
+        # set up the mocks
+        mocks = [Mock() for _ in range(len(channels))]
+        client._on_message_unsupported = mocks[0]
+        client._on_market_trade_updates = mocks[1]
+        client._on_ticker_updates = mocks[2]
+        client._on_price_updates = mocks[3]
+        client._on_auth_updates = mocks[4]
+        client._on_balance_updates = mocks[5]
+        client._on_heartbeat_updates = mocks[6]
+        client._on_symbols_updates = mocks[7]
+        client._on_l2_updates = mocks[8]
+        client._on_l3_updates = mocks[9]
+
+        # checks
+        msg = {}
+        for i, ch in enumerate(channels):
+            msg.update({"channel": ch})
+            client.on_message(json.dumps(msg))
+            assert client._check_message_seqnum.call_count == i + 1
+            for j in range(i):
+                assert mocks[j].call_count == 1
+            for j in range(i + 1, len(channels)):
+                assert mocks[j].call_count == 0
+            assert mocks[i].call_args[0][0] == msg
+
+        client.on_message(None)
+
+    def test_seqnum(self):
+        # first message should be 0
+        client = BcexClient([Symbol.ALGOUSD])
+        client.exit = Mock()
+        client._on_heartbeat_updates = Mock()
+        assert client._seqnum == -1
+
+        client.on_message(json.dumps({"seqnum": 0, "channel": Channel.HEARTBEAT}))
+        assert client.exit.call_count == 0
+
+        # if first message is not 0 it exits
+        client = BcexClient([Symbol.ALGOUSD])
+        client.exit = Mock()
+        client._on_heartbeat_updates = Mock()
+
+        client.on_message(json.dumps({"seqnum": 1, "channel": Channel.HEARTBEAT}))
+        assert client.exit.call_count == 1
+
+        # if one message has not been received it exits
+        client = BcexClient([Symbol.ALGOUSD])
+        client.exit = Mock()
+        client._on_heartbeat_updates = Mock()
+
+        client.on_message(json.dumps({"seqnum": 0, "channel": Channel.HEARTBEAT}))
+        client.on_message(json.dumps({"seqnum": 1, "channel": Channel.HEARTBEAT}))
+        client.on_message(json.dumps({"seqnum": 2, "channel": Channel.HEARTBEAT}))
+        client.on_message(json.dumps({"seqnum": 3, "channel": Channel.HEARTBEAT}))
+        assert client.exit.call_count == 0
+        client.on_message(json.dumps({"seqnum": 5, "channel": Channel.HEARTBEAT}))
+        assert client.exit.call_count == 1
+
+    @patch("bcex.core.websocket_client.datetime")
+    def test_on_ping_checks_heartbeat(self, mock_datetime):
+        client = BcexClient([Symbol.ALGOUSD])
+        client.exit = Mock()
+        # initially we do not have a heartbeat reference
+        assert client._last_heartbeat is None
+
+        # if no heartbeats subscribed we ignore it
+        dt0 = datetime(2017, 1, 2, 1, tzinfo=pytz.UTC)
+        mock_datetime.now = Mock(return_value=dt0)
+        client.on_ping()
+        assert client._last_heartbeat is None
+        assert mock_datetime.now.call_count == 0
+        assert client.exit.call_count == 0
+
+        # heartbeats subscribed will initiate the last heartbeat reference
+        client.channel_status[Channel.HEARTBEAT] = ChannelStatus.SUBSCRIBED
+        client.on_ping()
+        assert client._last_heartbeat == dt0
+        assert mock_datetime.now.call_count == 1
+        assert client.exit.call_count == 0
+
+        # last heartbeat request was less than 5 seconds ago
+        mock_datetime.now = Mock(return_value=dt0 + timedelta(seconds=2))
+        client.on_ping()
+        assert client._last_heartbeat == dt0
+        assert mock_datetime.now.call_count == 1
+        assert client.exit.call_count == 0
+
+        # last heartbeat request was between 5 and 10 seconds ago
+        mock_datetime.now = Mock(return_value=dt0 + timedelta(seconds=7))
+        client.on_ping()
+        assert client._last_heartbeat == dt0
+        assert mock_datetime.now.call_count == 1
+        assert client.exit.call_count == 0
+
+        # last heartbeat request was more than 10 seconds ago : we exit
+        mock_datetime.now = Mock(return_value=dt0 + timedelta(seconds=13))
+        client.on_ping()
+        assert mock_datetime.now.call_count == 1
+        assert client.exit.call_count == 1
