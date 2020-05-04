@@ -544,7 +544,7 @@ class ExchangeInterface:
         candles : list
             list of candles at timestamp
         """
-        return self.ws.candles[symbol]
+        return self.client.candles[symbol]
 
 
 if __name__ == "__main__":
