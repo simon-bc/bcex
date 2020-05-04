@@ -4,55 +4,10 @@ from datetime import datetime
 import pandas as pd
 import pytz
 from bcex.core.orders import OrderSide, OrderType
+from bcex.core.utils import datetime2unixepoch, unixepoch2datetime
 from bcex.core.websocket_client import Environment
 from bcex.examples.trader import BaseTrader
 from requests import get
-
-
-def datetime2unixepoch(dt):
-    """ Utility to transform a datetime instance into an unix epoch represented as an int.
-
-    Parameters
-    ----------
-    dt: datetime
-
-    Returns
-    -------
-    int
-        unix epoch
-    """
-    if dt.tzinfo is None:
-        dt = pytz.UTC.localize(dt)
-    else:
-        dt = dt.astimezone(pytz.UTC)
-
-    epoch = pytz.UTC.localize(datetime.utcfromtimestamp(0))
-    delta = dt - epoch
-
-    result = delta.total_seconds()
-    result *= 1000
-
-    return int(result)
-
-
-def unixepoch2datetime(unixepoch):
-    """Given a timestamp, it returns a datetime object.
-
-    Parameters
-    ----------
-    unixepoch : int
-       Timestamp. It can have either a second or millisecond precision
-
-    Returns
-    -------
-    time : datetime
-       Datetime object corresponding to the original timestamp
-    """
-    unixepoch = float(unixepoch) / 1000.0
-
-    time = pytz.UTC.localize(datetime.utcfromtimestamp(unixepoch))
-
-    return time
 
 
 class SimpleStrategy(BaseTrader):
@@ -84,12 +39,14 @@ class SimpleStrategy(BaseTrader):
 
     def get_historical_candles(self):
         end_date = datetime.now(pytz.UTC)
-        prices_url = (
-            f"https://api.blockchain.com/nabu-gateway/markets/exchange/"
-            f"prices?symbol={self.symbol}&start={datetime2unixepoch(self.start_date)}&end={datetime2unixepoch(end_date)}"
-            f"&granularity={self.granularity}"
-        )
-        r = get(prices_url)
+        payload = {
+            "symbol": self.symbol,
+            "start": datetime2unixepoch(self.start_date),
+            "end": datetime2unixepoch(end_date),
+            "granularity": self.granularity,
+        }
+        prices_url = "https://api.blockchain.com/nabu-gateway/markets/exchange/prices?"
+        r = get(prices_url, params=payload)
         res = r.json()
         df_res = pd.DataFrame(
             {
