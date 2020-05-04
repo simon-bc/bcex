@@ -221,7 +221,7 @@ class BcexClient(object):
             for ch, kw in channel_kwargs.items():
                 if ch not in self.channel_kwargs:
                     self.channel_kwargs[ch] = {}
-                self.channel_kwargs[ch].update(channel_kwargs)
+                self.channel_kwargs[ch].update(kw)
 
     def _init_channel_status(self):
         """Initialise or reset channel status
