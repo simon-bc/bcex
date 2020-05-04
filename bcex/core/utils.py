@@ -4,13 +4,6 @@ import iso8601 as iso8601
 import pytz
 
 
-def parse_balance(balances):
-    return {
-        b["currency"]: {"available": b["available"], "balance": b["balance"]}
-        for b in balances
-    }
-
-
 def valid_datetime(s):
     """Parse a string to a valid datetime.
 
