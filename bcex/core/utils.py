@@ -29,6 +29,7 @@ def update_max_list(l, e, n):
 
 def datetime2unixepoch(dt):
     """ Utility to transform a datetime instance into an unix epoch represented as an int.
+    The unixepoch is in milliseconds as this is the standard for the exchange
 
     Parameters
     ----------
@@ -51,7 +52,7 @@ def datetime2unixepoch(dt):
 
 
 def unixepoch2datetime(unixepoch):
-    """Given a timestamp, it returns a datetime object.
+    """Given a timestamp in milliseconds, it returns a datetime object.
 
     Parameters
     ----------
