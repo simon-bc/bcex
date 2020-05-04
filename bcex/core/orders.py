@@ -96,7 +96,7 @@ class Order:
                 )
         if self.order_type == OrderType.MARKET:
             if self.post_only:
-                raise ValueError(f"Much not post_only for order type {self.order_type}")
+                raise ValueError(f"Must not post_only for order type {self.order_type}")
 
             if self.time_in_force is None:
                 raise ValueError(
