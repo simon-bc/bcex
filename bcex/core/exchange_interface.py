@@ -522,7 +522,7 @@ class ExchangeInterface:
         -------
         order_book : Dict
         """
-        return self.ws.l2_book[symbol]
+        return self.client.l2_book[symbol]
 
     def get_balances(self):
         """Get user balances"""
