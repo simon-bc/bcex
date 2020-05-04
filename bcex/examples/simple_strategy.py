@@ -16,7 +16,7 @@ class SimpleStrategy(BaseTrader):
         symbol,
         start_date,
         rolling_window=30,
-        balance_percentage=0.1,
+        balance_fraction=0.1,
         granularity=3600,
         refresh_rate=60,
         env=Environment.STAGING,
@@ -34,7 +34,7 @@ class SimpleStrategy(BaseTrader):
         self.granularity = granularity
         self._historical_candles = None
         self.start_date = start_date
-        self.balance_percentage = balance_percentage
+        self.balance_fraction = balance_fraction
         self.latest_timestamp = None
 
     def get_historical_candles(self):
@@ -111,7 +111,7 @@ class SimpleStrategy(BaseTrader):
             self.exchange.place_order(
                 symbol=self.symbol,
                 order_type=OrderType.LIMIT,
-                quantity=balance * self.balance_percentage,
+                quantity=balance * self.balance_fraction,
                 price=moving_average,
                 side=OrderSide.SELL,
                 check_balance=True,
@@ -125,7 +125,7 @@ class SimpleStrategy(BaseTrader):
             self.exchange.place_order(
                 symbol=self.symbol,
                 order_type=OrderType.LIMIT,
-                quantity=(balance * self.balance_percentage) / moving_average,
+                quantity=(balance * self.balance_fraction) / moving_average,
                 price=moving_average,
                 side=OrderSide.BUY,
                 check_balance=True,

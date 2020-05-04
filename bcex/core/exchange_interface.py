@@ -20,7 +20,6 @@ class ExchangeInterface:
         Channel.SYMBOLS,
         Channel.TICKER,
         Channel.TRADES,
-        Channel.HEARTBEAT,
     ]
 
     def __init__(
