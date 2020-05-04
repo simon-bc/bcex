@@ -57,7 +57,7 @@ def unixepoch2datetime(unixepoch):
     Parameters
     ----------
     unixepoch : int
-       Timestamp. It can have either a second or millisecond precision
+       Timestamp at millisecond precision
 
     Returns
     -------
