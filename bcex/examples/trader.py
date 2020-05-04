@@ -24,7 +24,7 @@ class BaseTrader:
             api_secret=api_key,
             env=env,
             channels=self.CHANNELS,
-            channels_kwargs=channels_kwargs,
+            channel_kwargs=channels_kwargs,
         )
         self.exchange.connect()
         self._symbol = symbol

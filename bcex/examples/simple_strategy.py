@@ -1,16 +1,18 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pytz
 from bcex.core.orders import OrderSide, OrderType
 from bcex.core.utils import datetime2unixepoch, unixepoch2datetime
-from bcex.core.websocket_client import Environment
+from bcex.core.websocket_client import Environment, Channel
 from bcex.examples.trader import BaseTrader
 from requests import get
 
 
 class SimpleStrategy(BaseTrader):
+    CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS, Channel.PRICES]
+
     def __init__(
         self,
         symbol,
@@ -37,7 +39,7 @@ class SimpleStrategy(BaseTrader):
         self.balance_fraction = balance_fraction
         self.latest_timestamp = None
 
-    def get_historical_candles(self):
+    def get_candle_df(self):
         end_date = datetime.now(pytz.UTC)
         payload = {
             "symbol": self.symbol,
@@ -59,38 +61,7 @@ class SimpleStrategy(BaseTrader):
                 for rec in res["prices"]
             }
         ).T
-        return df_res
-
-    @property
-    def historical_candles(self):
-        if self._historical_candles is None:
-            self._historical_candles = self.get_historical_candles()
-        return self._historical_candles
-
-    def get_latest_candles(self):
-        res = self.exchange.get_candles(self.symbol)
-        if res:
-            df_res = pd.DataFrame(
-                {
-                    unixepoch2datetime(rec[0]): {
-                        "open": rec[1],
-                        "high": rec[2],
-                        "low": rec[3],
-                        "close": rec[4],
-                    }
-                    for rec in res["prices"]
-                }
-            ).T
-            return df_res
-        return pd.DataFrame()
-
-    @property
-    def live_candles(self):
-        return self.get_latest_candles()
-
-    def get_candle_df(self):
-        df = pd.concat([self.historical_candles, self.live_candles]).sort_index()
-        return df
+        return df_res.sort_index()
 
     def place_order_at_crossover(self, df):
         df["closing_prices_rolling_average"] = df.close.rolling(
@@ -100,7 +71,7 @@ class SimpleStrategy(BaseTrader):
         last_row = df.iloc[-1]
         last_side_over = last_row.close_over_rolling_average
         moving_average = last_row.closing_prices_rolling_average
-        self.latest_timestamp = last_row.index
+        self.latest_timestamp = last_row.name
         if last_side_over:
             # Was last over MA so if drops below then sell
             bid_price = self.exchange.get_bid_price(self.symbol)
@@ -131,19 +102,23 @@ class SimpleStrategy(BaseTrader):
                 check_balance=True,
             )
 
-    def is_new_candle(self, candles):
-        last_timestamp = candles.iloc[-1].index
-        if last_timestamp > self.latest_timestamp:
+    def is_new_candle(self):
+        timestamp = self.latest_timestamp + timedelta(seconds=self.granularity) * 2
+        if timestamp < datetime.now(pytz.UTC):
             return True
         return False
 
     def handle_orders(self):
-        candles = self.get_candle_df()
         if self.latest_timestamp is not None:
-            if self.is_new_candle(candles):
+            if self.is_new_candle():
+                logging.info("New Candle")
                 self.exchange.cancel_all_orders()
+                candles = self.get_candle_df()
                 self.place_order_at_crossover(candles)
+            else:
+                logging.info("No New Candle")
         else:
+            candles = self.get_candle_df()
             self.exchange.cancel_all_orders()
             self.place_order_at_crossover(candles)
 
@@ -152,5 +127,7 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(message)s", level=logging.INFO
     )
-    ss = SimpleStrategy("BTC-USD", start_date=datetime(2020, 4, 1))
+    ss = SimpleStrategy(
+        "BTC-USD", start_date=datetime(2020, 4, 1), granularity=60, refresh_rate=60
+    )
     ss.run_loop()
