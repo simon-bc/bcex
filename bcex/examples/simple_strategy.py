@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import pandas as pd
 import pytz
@@ -21,7 +21,7 @@ class SimpleStrategy(BaseTrader):
         balance_fraction=0.1,
         granularity=3600,
         refresh_rate=60,
-        env=Environment.STAGING,
+        env=Environment.PROD,
         **kwargs,
     ):
         channel_kwargs = {"prices": {"granularity": granularity}}
@@ -39,7 +39,7 @@ class SimpleStrategy(BaseTrader):
         self.balance_fraction = balance_fraction
         self.latest_timestamp = None
 
-    def get_candle_df(self):
+    def get_historical_candles(self):
         end_date = datetime.now(pytz.UTC)
         payload = {
             "symbol": self.symbol,
@@ -62,6 +62,44 @@ class SimpleStrategy(BaseTrader):
             }
         ).T
         return df_res.sort_index()
+
+    @property
+    def historical_candles(self):
+        if self._historical_candles is None:
+            self._historical_candles = self.get_historical_candles()
+        return self._historical_candles
+
+    def get_latest_candles(self):
+        res = self.exchange.get_candles(self.symbol)
+        if res:
+            df_res = pd.DataFrame(
+                {
+                    unixepoch2datetime(rec[0]): {
+                        "open": rec[1],
+                        "high": rec[2],
+                        "low": rec[3],
+                        "close": rec[4],
+                    }
+                    for rec in res
+                }
+            ).T
+            return df_res.sort_index()
+        return pd.DataFrame()
+
+    @property
+    def live_candles(self):
+        return self.get_latest_candles()
+
+    def get_candle_df(self):
+        live_candles = self.live_candles
+        if live_candles.empty:
+            return self.historical_candles
+        min_time = live_candles.iloc[0].name
+        historical_candles = self.historical_candles[
+            self.historical_candles.index < min_time
+        ]
+        df = pd.concat([historical_candles, live_candles]).sort_index()
+        return df
 
     def place_order_at_crossover(self, df):
         df["closing_prices_rolling_average"] = df.close.rolling(
@@ -102,23 +140,22 @@ class SimpleStrategy(BaseTrader):
                 check_balance=True,
             )
 
-    def is_new_candle(self):
-        timestamp = self.latest_timestamp + timedelta(seconds=self.granularity) * 2
-        if timestamp < datetime.now(pytz.UTC):
+    def is_new_candle(self, candles):
+        last_timestamp = candles.iloc[-1].name
+        if last_timestamp > self.latest_timestamp:
             return True
         return False
 
     def handle_orders(self):
+        candles = self.get_candle_df()
         if self.latest_timestamp is not None:
-            if self.is_new_candle():
+            if self.is_new_candle(candles):
                 logging.info("New Candle")
                 self.exchange.cancel_all_orders()
-                candles = self.get_candle_df()
                 self.place_order_at_crossover(candles)
             else:
                 logging.info("No New Candle")
         else:
-            candles = self.get_candle_df()
             self.exchange.cancel_all_orders()
             self.place_order_at_crossover(candles)
 
@@ -128,6 +165,6 @@ if __name__ == "__main__":
         format="%(asctime)s [%(levelname)s] %(message)s", level=logging.INFO
     )
     ss = SimpleStrategy(
-        "BTC-USD", start_date=datetime(2020, 4, 1), granularity=60, refresh_rate=60
+        "BTC-USD", start_date=datetime(2020, 4, 1), granularity=300, refresh_rate=60
     )
     ss.run_loop()
