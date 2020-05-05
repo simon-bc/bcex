@@ -46,6 +46,16 @@ class TestOrder(object):
             expiry_date="20201010",
         )
 
+        Order(
+            symbol="BTC-USD",
+            order_type=OrderType.LIMIT,
+            price=1,
+            order_quantity=1,
+            side=OrderSide.SELL,
+            time_in_force=TimeInForce.GTC,
+            post_only=True,
+        )
+
         with pytest.raises(ValueError):
             Order(
                 order_type=OrderType.LIMIT,
@@ -106,4 +116,13 @@ class TestOrder(object):
                 order_quantity=1,
                 side=OrderSide.SELL,
                 time_in_force=TimeInForce.IOC,
+            )
+
+        with pytest.raises(ValueError):
+            Order(
+                symbol="BTC-USD",
+                order_type=OrderType.MARKET,
+                order_quantity=1,
+                side=OrderSide.SELL,
+                post_only=True,
             )

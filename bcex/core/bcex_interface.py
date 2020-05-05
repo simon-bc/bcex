@@ -233,6 +233,7 @@ class BcexInterface:
         expiry_date,
         stop_price,
         check_balance=False,
+        post_only=False,
     ):
         """Creates orders in correct format
 
@@ -255,6 +256,9 @@ class BcexInterface:
             Price to trigger the stop order
         check_balance : bool
             check if balance is sufficient for order
+        post_only: bool
+            whether to make sure that the order  will not match liquidity immediately.
+            It will be rejected instead of matching liquidity in the market.
 
         Returns
         -------
@@ -287,6 +291,7 @@ class BcexInterface:
             minimum_quantity=minimum_quantity,
             expiry_date=expiry_date,
             stop_price=stop_price,
+            post_only=post_only,
         )
 
     def place_order(
@@ -301,6 +306,7 @@ class BcexInterface:
         expiry_date=None,
         stop_price=None,
         check_balance=False,
+        post_only=False,
     ):
         """Place order with valid quantity and prices
 
@@ -327,6 +333,9 @@ class BcexInterface:
             Price to trigger the stop order
         check_balance : bool
             check if balance is sufficient for order
+        post_only: bool
+            whether to make sure that the order  will not match liquidity immediately.
+            It will be rejected instead of matching liquidity in the market.
 
         """
         if not self._has_symbol_details(symbol):
@@ -343,6 +352,7 @@ class BcexInterface:
             expiry_date,
             stop_price,
             check_balance,
+            post_only,
         )
         if order is not None:
             self.client.send_order(order)
