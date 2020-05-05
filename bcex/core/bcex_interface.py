@@ -7,7 +7,7 @@ from bcex.core.orders import Order, OrderSide, OrderType, TimeInForce
 from bcex.core.websocket_client import BcexClient, Book, Channel, Environment
 
 
-class ExchangeInterface:
+class BcexInterface:
     """Interface for the Bcex Exchange
 
     Attributes
@@ -549,7 +549,7 @@ class ExchangeInterface:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)
-    exchange = ExchangeInterface(["BTC-USD", "ETH-USD"])
+    exchange = BcexInterface(["BTC-USD", "ETH-USD"])
 
     exchange.connect()
     while True:

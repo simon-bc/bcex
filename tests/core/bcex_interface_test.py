@@ -1,16 +1,16 @@
 from unittest.mock import Mock, patch
 
-from bcex.core.exchange_interface import ExchangeInterface
+from bcex.core.bcex_interface import BcexInterface
 from bcex.core.orders import OrderSide, OrderType
 from bcex.core.symbol import Symbol
 from bcex.core.websocket_client import Channel, Environment, MockBcexClient
 
 
-class TestExchangeInterface:
-    @patch("bcex.core.exchange_interface.BcexClient")
+class TestBcexInterface:
+    @patch("bcex.core.bcex_interface.BcexClient")
     def test_init(self, mock_client):
         mock_client.side_effect = MockBcexClient
-        exi = ExchangeInterface(
+        exi = BcexInterface(
             [Symbol.ETHBTC, Symbol.BTCPAX],
             api_secret="14567",
             env=Environment.STAGING,
@@ -30,7 +30,7 @@ class TestExchangeInterface:
         assert mock_client.call_args[1]["cancel_position_on_exit"] is False
 
         mock_client.reset_mock()
-        exi = ExchangeInterface(
+        exi = BcexInterface(
             [Symbol.ETHBTC, Symbol.BTCPAX],
             api_secret=None,
             env=Environment.PROD,
@@ -42,12 +42,12 @@ class TestExchangeInterface:
         assert mock_client.call_args[1]["api_secret"] is None
         assert mock_client.call_args[1]["env"] == Environment.PROD
         assert set(mock_client.call_args[1]["channels"]) == set(
-            ExchangeInterface.REQUIRED_CHANNELS + [Channel.HEARTBEAT]
+            BcexInterface.REQUIRED_CHANNELS + [Channel.HEARTBEAT]
         )
         assert mock_client.call_args[1]["cancel_position_on_exit"] is True
 
     def test_required_channels(self):
-        assert set(ExchangeInterface.REQUIRED_CHANNELS) == {
+        assert set(BcexInterface.REQUIRED_CHANNELS) == {
             Channel.SYMBOLS,
             Channel.TICKER,
             Channel.TRADES,
@@ -57,20 +57,20 @@ class TestExchangeInterface:
         ins_details = {
             "base_currency_scale": 2,
         }
-        assert ExchangeInterface._scale_quantity(ins_details, 0.01) == 0.01
-        assert ExchangeInterface._scale_quantity(ins_details, 0.011) == 0.01
-        # assert ExchangeInterface._scale_quantity(ins_details, 0.0199) == 0.02
-        # assert ExchangeInterface._scale_quantity(ins_details, 2.555) == 2.56
-        # assert ExchangeInterface._scale_quantity(ins_details, 1222) == 1222
+        assert BcexInterface._scale_quantity(ins_details, 0.01) == 0.01
+        assert BcexInterface._scale_quantity(ins_details, 0.011) == 0.01
+        # assert BcexInterface._scale_quantity(ins_details, 0.0199) == 0.02
+        # assert BcexInterface._scale_quantity(ins_details, 2.555) == 2.56
+        # assert BcexInterface._scale_quantity(ins_details, 1222) == 1222
 
     def test_scale_price(self):
         ins_details = {"min_price_increment": 10, "min_price_increment_scale": 2}
-        assert ExchangeInterface._scale_price(ins_details, 1000) == 1000
-        assert ExchangeInterface._scale_price(ins_details, 1000.001) == 1000
-        assert ExchangeInterface._scale_price(ins_details, 1000.01) == 1000
-        assert ExchangeInterface._scale_price(ins_details, 1000.1) == 1000.1
-        # assert ExchangeInterface._scale_price(ins_details, 1001.999) == 1002.0
-        # assert ExchangeInterface._scale_price(ins_details, 2.555) == 2.6
+        assert BcexInterface._scale_price(ins_details, 1000) == 1000
+        assert BcexInterface._scale_price(ins_details, 1000.001) == 1000
+        assert BcexInterface._scale_price(ins_details, 1000.01) == 1000
+        assert BcexInterface._scale_price(ins_details, 1000.1) == 1000.1
+        # assert BcexInterface._scale_price(ins_details, 1001.999) == 1002.0
+        # assert BcexInterface._scale_price(ins_details, 2.555) == 2.6
 
     def test_check_quantity_within_limits(self):
         ins_details = {
@@ -79,14 +79,14 @@ class TestExchangeInterface:
             "max_order_size": 500,
             "max_order_size_scale": 2,
         }
-        assert not ExchangeInterface._check_quantity_within_limits(ins_details, 0.01)
-        assert ExchangeInterface._check_quantity_within_limits(ins_details, 0.6)
-        assert ExchangeInterface._check_quantity_within_limits(ins_details, 1)
-        assert not ExchangeInterface._check_quantity_within_limits(ins_details, 5.1)
+        assert not BcexInterface._check_quantity_within_limits(ins_details, 0.01)
+        assert BcexInterface._check_quantity_within_limits(ins_details, 0.6)
+        assert BcexInterface._check_quantity_within_limits(ins_details, 1)
+        assert not BcexInterface._check_quantity_within_limits(ins_details, 5.1)
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_check_available_balance(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.BTCUSD])
+        exi = BcexInterface(symbols=[Symbol.BTCUSD])
         assert mock_client.call_count == 1
 
         exi.client.balances.update(
@@ -104,9 +104,9 @@ class TestExchangeInterface:
         assert not exi._check_available_balance(ins_details, OrderSide.SELL, 0.5, 10000)
         assert exi._check_available_balance(ins_details, OrderSide.SELL, 0.09, 10000)
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_get_last_traded_price(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
 
         act = exi.get_last_traded_price(Symbol.ETHBTC)
@@ -129,27 +129,27 @@ class TestExchangeInterface:
         act = exi.get_last_traded_price(Symbol.ETHBTC)
         assert act == 20.120
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_connect(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
         exi.client.connect = Mock()
 
         exi.connect()
         assert exi.client.connect.call_count == 1
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_exit(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.BTCUSD])
+        exi = BcexInterface(symbols=[Symbol.BTCUSD])
         assert mock_client.call_count == 1
         exi.client.exit = Mock()
 
         exi.exit()
         assert exi.client.exit.call_count == 1
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_is_open(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
 
         assert not exi.is_open()
@@ -160,9 +160,9 @@ class TestExchangeInterface:
         exi.client.exited = True
         assert not exi.is_open()
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_place_order(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
 
         exi.client.send_order = Mock()
@@ -207,14 +207,14 @@ class TestExchangeInterface:
         )
         assert exi.client.send_order.call_count == 0
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_create_order(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_tick_size(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.BTCPAX])
+        exi = BcexInterface(symbols=[Symbol.BTCPAX])
         assert mock_client.call_count == 1
 
         # no information about symbol
@@ -228,9 +228,9 @@ class TestExchangeInterface:
         act_tick_size = exi.tick_size(Symbol.BTCPAX)
         assert act_tick_size == 0.006
 
-    @patch("bcex.core.exchange_interface.BcexClient", side_effect=MockBcexClient)
+    @patch("bcex.core.bcex_interface.BcexClient", side_effect=MockBcexClient)
     def test_lot_size(self, mock_client):
-        exi = ExchangeInterface(symbols=[Symbol.ETHBTC])
+        exi = BcexInterface(symbols=[Symbol.ETHBTC])
         assert mock_client.call_count == 1
 
         # no information about symbol
