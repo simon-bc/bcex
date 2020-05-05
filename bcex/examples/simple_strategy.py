@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import pytz
@@ -65,6 +65,11 @@ class SimpleCandlesStrategy(BaseTrader):
             self._historical_candles = self.get_historical_candles()
         return self._historical_candles
 
+    def _check_candle_is_finished(self, rec):
+        return unixepoch2datetime(rec[0]) + timedelta(
+            seconds=self.granularity
+        ) < datetime.now(pytz.UTC)
+
     def get_latest_candles(self):
         res = self.exchange.get_candles(self.symbol)
         if res:
@@ -77,6 +82,7 @@ class SimpleCandlesStrategy(BaseTrader):
                         "close": rec[4],
                     }
                     for rec in res
+                    if self._check_candle_is_finished(rec)
                 }
             ).T
             return df_res.sort_index()
