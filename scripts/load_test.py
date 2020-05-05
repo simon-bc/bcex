@@ -1,6 +1,6 @@
 import logging
 
-from bcex.core.bcex_interface import BcexInterface
+from bcex.core.exchange_interface import ExchangeInterface
 from bcex.core.symbol import Symbol
 from bcex.core.websocket_client import Channel, Environment
 from bcex.examples.quote_both_sides import quote_randomly_both_sides_interface
@@ -12,7 +12,7 @@ RETRY_NUMBER = 5
 
 
 def main():
-    ex_interface = BcexInterface(
+    ex_interface = ExchangeInterface(
         symbols=[Symbol.ETHBTC, Symbol.BTCUSD],
         channels=[
             Channel.HEARTBEAT,

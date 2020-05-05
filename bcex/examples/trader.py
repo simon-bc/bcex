@@ -3,7 +3,7 @@ import os
 import sys
 import time
 
-from bcex.core.bcex_interface import BcexInterface
+from bcex.core.exchange_interface import ExchangeInterface
 from bcex.core.orders import OrderSide, OrderType, TimeInForce
 from bcex.core.websocket_client import Channel, Environment
 
@@ -19,7 +19,7 @@ class BaseTrader:
         refresh_rate=5,
         channels_kwargs=None,
     ):
-        self.exchange = BcexInterface(
+        self.exchange = ExchangeInterface(
             [symbol],
             api_secret=api_key,
             env=env,
