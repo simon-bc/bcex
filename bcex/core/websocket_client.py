@@ -11,7 +11,7 @@ import websocket as webs
 from bcex.core.order_response import OrderResponse, OrderStatus
 from bcex.core.orders import Order, OrderType
 from bcex.core.trade import Trade
-from bcex.core.utils import parse_balance, update_max_list, valid_datetime
+from bcex.core.utils import update_max_list, valid_datetime
 from sortedcontainers import SortedDict as sd
 
 MESSAGE_LIMIT = 1200  # number of messages per minute allowed
@@ -114,6 +114,7 @@ class BcexClient(object):
          - for symbol specific channels, the value is a dict with key the symbol, str from the enum Symbol
             and value the status, str from the enum ChannelStatus
          - for non-symbol specific channels, the value is the status, str from the enum ChannelStatus
+    tickers: dict
     ws: WebSocketClient
     wst: Thread
         websocket client thread
@@ -134,7 +135,7 @@ class BcexClient(object):
         api_secret=None,
         cancel_position_on_exit=True,
     ):
-        """This class connects to the PIT websocket client
+        """This class connects to the Blockchain.com Exchange websocket client
 
         Parameters
         ----------
@@ -211,7 +212,7 @@ class BcexClient(object):
         self._seqnum = -1  # higher seqnum that we received (usually the latest)
         self._last_heartbeat = None
 
-        # set initial status to unsubcribed
+        # set initial status to unsubscribed
         self._init_channel_status()
 
     def _update_default_channel_kwargs(self, channel_kwargs):
@@ -220,21 +221,20 @@ class BcexClient(object):
             for ch, kw in channel_kwargs.items():
                 if ch not in self.channel_kwargs:
                     self.channel_kwargs[ch] = {}
-                self.channel_kwargs[ch].update(channel_kwargs)
+                self.channel_kwargs[ch].update(kw)
 
     def _init_channel_status(self):
         """Initialise or reset channel status
         """
         self.channel_status = {}
-        # channels symbols specific
-        for channel in set(self.channels).intersection(set(Channel.PUBLIC)):
-            self.channel_status[channel] = {
-                s: ChannelStatus.UNSUBSCRIBED for s in self.symbols
-            }
 
-        # channels non symbols specific
-        for channel in set(self.channels).intersection(set(Channel.PRIVATE)):
-            self.channel_status[channel] = ChannelStatus.UNSUBSCRIBED
+        for channel in Channel.ALL:
+            if Channel.is_symbol_specific(channel):
+                self.channel_status[channel] = {
+                    s: ChannelStatus.UNSUBSCRIBED for s in self.symbols
+                }
+            else:
+                self.channel_status[channel] = ChannelStatus.UNSUBSCRIBED
 
     def _check_attributes(self):
         for attr, _type in [
@@ -403,7 +403,7 @@ class BcexClient(object):
         """
         if self.channel_status[Channel.HEARTBEAT] != ChannelStatus.SUBSCRIBED:
             return
-        now = datetime.utcnow().replace(tzinfo=pytz.UTC)
+        now = datetime.now(pytz.UTC)
         if self._last_heartbeat is None:
             self._last_heartbeat = now
         log_heartbeat = f"[{now}] Last heartbeat was {(now - self._last_heartbeat).total_seconds()} seconds ago."
@@ -411,11 +411,11 @@ class BcexClient(object):
             logging.error(log_heartbeat + " Exiting")
             self.exit()
         elif (
-            timedelta(seconds=100) >= now - self._last_heartbeat >= timedelta(seconds=5)
+            timedelta(seconds=10) >= now - self._last_heartbeat >= timedelta(seconds=5)
         ):
             logging.warning(log_heartbeat + " Waiting few more seconds")
         else:
-            logging.debug(log_heartbeat,)
+            logging.debug(log_heartbeat)
 
     def exit(self):
         """On exit websocket connection
@@ -525,7 +525,7 @@ class BcexClient(object):
             self._on_unsupported_event_message(msg, Channel.TRADES)
 
     def _on_price_updates(self, msg):
-        """ Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
+        """Store latest candle update and truncate list to length MAX_CANDLES_LEN"""
         if msg["event"] == Event.SUBSCRIBED:
             self._on_subscribed_updates(msg)
         elif msg["event"] == Event.UPDATED:
@@ -648,7 +648,10 @@ class BcexClient(object):
         if msg["event"] == Event.SUBSCRIBED:
             self._on_subscribed_updates(msg)
         elif msg["event"] == Event.SNAPSHOT:
-            self.balances = parse_balance(msg["balances"])
+            self.balances = {
+                b["currency"]: {"available": b["available"], "balance": b["balance"]}
+                for b in msg["balances"]
+            }
         else:
             self._on_unsupported_event_message(msg, Channel.BALANCES)
 
@@ -753,6 +756,20 @@ class BcexClient(object):
             )
 
         logging.info("Successfully authenticated")
+
+
+class MockBcexClient(BcexClient):
+    """Mock Bcex Client which does not actually connects to the websocket
+    """
+
+    def connect(self):
+        pass
+
+    def close(self):
+        pass
+
+    def exit(self):
+        pass
 
 
 if __name__ == "__main__":

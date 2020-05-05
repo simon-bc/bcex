@@ -1,9 +1,9 @@
 import logging
 
-from core.exchange_interface import ExchangeInterface
-from core.symbol import Symbol
-from core.websocket_client import Channel, Environment
-from examples.quote_both_sides import quote_randomly_both_sides_interface
+from bcex.core.bcex_interface import BcexInterface
+from bcex.core.symbol import Symbol
+from bcex.core.websocket_client import Channel, Environment
+from bcex.examples.quote_both_sides import quote_randomly_both_sides_interface
 from websocket import WebSocketConnectionClosedException
 
 order_quantity_map = {Symbol.ETHBTC: 0.024, Symbol.BTCUSD: 0.001}
@@ -12,7 +12,7 @@ RETRY_NUMBER = 5
 
 
 def main():
-    ex_interface = ExchangeInterface(
+    ex_interface = BcexInterface(
         symbols=[Symbol.ETHBTC, Symbol.BTCUSD],
         channels=[
             Channel.HEARTBEAT,

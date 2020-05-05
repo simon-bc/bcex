@@ -2,21 +2,21 @@ import logging
 import random
 import time
 
-from core.exchange_interface import ExchangeInterface
-from core.order_response import OrderStatus
-from core.orders import OrderSide, OrderType, TimeInForce
-from core.symbol import Symbol
+from bcex.core.bcex_interface import BcexInterface
+from bcex.core.order_response import OrderStatus
+from bcex.core.orders import OrderSide, OrderType, TimeInForce
+from bcex.core.symbol import Symbol
 
 ORDER_QUANTITY_MAP = {Symbol.ETHBTC: 0.024, Symbol.BTCUSD: 0.001}
 
 
 def quote_randomly_both_sides_interface(
-    ex_interface: ExchangeInterface, levels, sleep_time
+    ex_interface: BcexInterface, levels, sleep_time
 ):
     """
     Parameters
     ----------
-    bcex_client: ExchangeInterface
+    bcex_client: BcexInterface
     levels: int
         levels of the orderbooks to populate
     sleep_time: int
