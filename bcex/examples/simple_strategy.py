@@ -103,6 +103,10 @@ class SimpleCandlesStrategy(BaseTrader):
             return True
         return False
 
+    def act_on_new_candle(self, candles_df):
+        self.order_decision_from_candles(candles_df)
+        self.latest_timestamp = candles_df.iloc[-1].name
+
     def order_decision_from_candles(self, candles_df):
         raise NotImplementedError
 
@@ -111,11 +115,11 @@ class SimpleCandlesStrategy(BaseTrader):
         if self.latest_timestamp is not None:
             if self.is_new_candle(candles):
                 logging.info("New Candle")
-                self.order_decision_from_candles(candles)
+                self.act_on_new_candle(candles)
             else:
                 logging.info("No New Candle")
         else:
-            self.order_decision_from_candles(candles)
+            self.act_on_new_candle(candles)
 
 
 class MovingAverageStrategy(SimpleCandlesStrategy):
@@ -157,7 +161,6 @@ class MovingAverageStrategy(SimpleCandlesStrategy):
         last_row = df.iloc[-1]
         last_side_over = last_row.close_over_rolling_average
         moving_average = last_row.closing_prices_rolling_average
-        self.latest_timestamp = last_row.name
         if last_side_over:
             # Was last over MA so if drops below then sell
             bid_price = self.exchange.get_bid_price(self.symbol)
