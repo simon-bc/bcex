@@ -294,6 +294,28 @@ class BcexInterface:
             post_only=post_only,
         )
 
+    def buy(self, symbol, quantity):
+        """Sends a market order to buy the given quantity
+        """
+        self.place_order(
+            symbol,
+            OrderSide.BUY,
+            quantity,
+            order_type=OrderType.MARKET,
+            time_in_force=TimeInForce.GTC,
+        )
+
+    def sell(self, symbol, quantity):
+        """Sends a market order to sell the given quantity
+        """
+        self.place_order(
+            symbol,
+            OrderSide.SELL,
+            quantity,
+            order_type=OrderType.MARKET,
+            time_in_force=TimeInForce.GTC,
+        )
+
     def place_order(
         self,
         symbol,
@@ -323,7 +345,7 @@ class BcexInterface:
         price : float
             price of order
         order_type : OrderType
-        time_in_force : TimeInForce
+        time_in_force : TimeInForce or None
             Time in force, applicable for orders except market orders
         minimum_quantity : float
             The minimum quantity required for an TimeInForce.IOC fill

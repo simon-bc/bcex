@@ -79,7 +79,8 @@ class TestOrder(object):
                 symbol="BTC-USD",
                 order_type=OrderType.MARKET,
                 order_quantity=1,
-                side=None,
+                side=OrderSide.SELL,
+                time_in_force=None,
             )
 
         with pytest.raises(ValueError):
