@@ -16,7 +16,11 @@ class ExchangeInterface:
         websocket client to handle interactions with the exchange
     """
 
-    REQUIRED_CHANNELS = [Channel.SYMBOLS, Channel.TICKER, Channel.TRADES]
+    REQUIRED_CHANNELS = [
+        Channel.SYMBOLS,
+        Channel.TICKER,
+        Channel.TRADES,
+    ]
 
     def __init__(
         self,
@@ -507,6 +511,19 @@ class ExchangeInterface:
         """
         return self.client.balances.get(coin, {}).get("available", 0)
 
+    def get_order_book(self, symbol):
+        """Get full order book for
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        order_book : Dict
+        """
+        return self.client.l2_book[symbol]
+
     def get_balances(self):
         """Get user balances"""
         return self.client.balances
@@ -514,6 +531,20 @@ class ExchangeInterface:
     def get_symbols(self):
         """Get all the symbols"""
         return self.client.symbols
+
+    def get_candles(self, symbol):
+        """Get candles for symbol
+
+        Parameters
+        ----------
+        symbol : Symbol
+
+        Returns
+        -------
+        candles : list
+            list of candles at timestamp
+        """
+        return self.client.candles[symbol]
 
 
 if __name__ == "__main__":

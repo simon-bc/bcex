@@ -221,7 +221,7 @@ class BcexClient(object):
             for ch, kw in channel_kwargs.items():
                 if ch not in self.channel_kwargs:
                     self.channel_kwargs[ch] = {}
-                self.channel_kwargs[ch].update(channel_kwargs)
+                self.channel_kwargs[ch].update(kw)
 
     def _init_channel_status(self):
         """Initialise or reset channel status
@@ -609,7 +609,7 @@ class BcexClient(object):
                     price = data["px"]
                     size = data["qty"]
                     if size == 0.0:
-                        logging.info(f"removing {price}:{size}")
+                        logging.debug(f"removing {price}:{size}")
                         self.l2_book[symbol][book].pop(price)
                     else:
                         self.l2_book[symbol][book][price] = size
@@ -617,9 +617,9 @@ class BcexClient(object):
             self._on_unsupported_event_message(msg, Channel.L2)
 
         if len(self.l2_book[symbol][Book.ASK]) > 0:
-            logging.info(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
+            logging.debug(f"Ask: {self.l2_book[symbol][Book.ASK].peekitem(0)} ")
         if len(self.l2_book[symbol][Book.BID]) > 0:
-            logging.info(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
+            logging.debug(f"Bid: {self.l2_book[symbol][Book.BID].peekitem(-1)}")
 
     def _on_l3_updates(self, msg):
         logging.debug(msg)
