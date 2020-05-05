@@ -21,10 +21,10 @@ class OrderType:
 
 
 class TimeInForce:
-    GTC = "GTC"
-    IOC = "IOC"
-    FOK = "FOK"
-    GTD = "GTD"
+    GTC = "GTC"  # Good Till Cancel
+    IOC = "IOC"  # Immediate or Cancel
+    FOK = "FOK"  # Fill or Kill
+    GTD = "GTD"  # Good Till Date
 
 
 class OrderAction:
@@ -108,11 +108,9 @@ class Order:
                     "Cannot have price for order type {}".format(self.order_type)
                 )
 
-            if self.time_in_force is not None:
+            if self.time_in_force != TimeInForce.GTC:
                 raise ValueError(
-                    "Cannot have time_in_force for order type {}".format(
-                        self.order_type
-                    )
+                    "Market order should have time_in_force {}".format(TimeInForce.GTC)
                 )
 
         if self.time_in_force == TimeInForce.GTD:
