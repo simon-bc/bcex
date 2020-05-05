@@ -46,7 +46,7 @@ class Order:
         stop_price=None,
         minimum_quantity=None,
         order_id=None,
-        post_only=True,
+        post_only=False,
     ):
         self.order_type = order_type
         self.symbol = symbol
@@ -67,9 +67,8 @@ class Order:
                 self.action = OrderAction.CANCEL_ORDER
         else:
             self.action = OrderAction.PLACE_ORDER
-
-        self.check_valid_order()
         self.post_only = post_only
+        self.check_valid_order()
 
     def __str__(self):
         return f"{self.order_id} - {self.side} {self.order_quantity}@{self.price} {self.symbol}"
@@ -94,11 +93,14 @@ class Order:
                 raise ValueError(
                     "Must have price for order type {}".format(self.order_type)
                 )
-
             if self.time_in_force is None:
                 raise ValueError(
                     "Must have time_in_force for order type {}".format(self.order_type)
                 )
+
+        if self.order_type == OrderType.MARKET:
+            if self.post_only:
+                raise ValueError(f"Must not post_only for order type {self.order_type}")
 
         if self.order_type in [OrderType.MARKET]:
             if self.price is not None:
@@ -163,9 +165,8 @@ class Order:
             }
             if self.order_type in [OrderType.LIMIT, OrderType.STOP_LIMIT]:
                 res.update({"price": self.price})
-                # TODO: restore this property
-                # if self.post_only:
-                #     res.update({"execInst": "ALO"})
+                if self.post_only:
+                    res.update({"execInst": "ALO"})
 
             if self.order_type in [OrderType.STOP, OrderType.STOP_LIMIT]:
                 res.update({"stopPx": self.stop_price})

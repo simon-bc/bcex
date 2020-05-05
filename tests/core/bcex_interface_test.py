@@ -188,6 +188,7 @@ class TestBcexInterface:
             quantity=1.01,
             price=1000.001,
             order_type=OrderType.LIMIT,
+            post_only=True,
         )
         assert exi.client.send_order.call_count == 1
         act_order = exi.client.send_order.call_args[0][0]
@@ -195,7 +196,7 @@ class TestBcexInterface:
         assert act_order is not None
         assert act_order.order_quantity == 1.01
         assert act_order.price == 1000
-
+        assert act_order.post_only is True
         # symbol available but wrong parameters : too big quantity
         exi.client.send_order.reset_mock()
         exi.place_order(
