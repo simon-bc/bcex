@@ -17,7 +17,7 @@ class Test(TestCommand):
 
 setuptools.setup(
     name="bcex",
-    version="0.0.1",
+    version="1.0.1",
     author="simon-bc",
     author_email="simon@blockchain.com",
     description="Websocket Client and interface for Blockchain.com Exchange",
