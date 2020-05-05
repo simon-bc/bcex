@@ -86,6 +86,16 @@ class TestOrder(object):
         with pytest.raises(ValueError):
             Order(
                 symbol="BTC-USD",
+                order_type=OrderType.MARKET,
+                price=100,
+                order_quantity=1,
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC,
+            )
+
+        with pytest.raises(ValueError):
+            Order(
+                symbol="BTC-USD",
                 order_type=OrderType.LIMIT,
                 price=1,
                 order_quantity=1,
