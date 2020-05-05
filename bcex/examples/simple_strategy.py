@@ -10,15 +10,13 @@ from bcex.examples.trader import BaseTrader
 from requests import get
 
 
-class SimpleStrategy(BaseTrader):
+class SimpleCandlesStrategy(BaseTrader):
     CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS, Channel.PRICES]
 
     def __init__(
         self,
         symbol,
         start_date,
-        rolling_window=30,
-        balance_fraction=0.1,
         granularity=3600,
         refresh_rate=60,
         env=Environment.PROD,
@@ -32,11 +30,9 @@ class SimpleStrategy(BaseTrader):
             channels_kwargs=channel_kwargs,
             **kwargs,
         )
-        self.rolling_window = rolling_window
         self.granularity = granularity
         self._historical_candles = None
         self.start_date = start_date
-        self.balance_fraction = balance_fraction
         self.latest_timestamp = None
 
     def get_historical_candles(self):
@@ -101,7 +97,59 @@ class SimpleStrategy(BaseTrader):
         df = pd.concat([historical_candles, live_candles]).sort_index()
         return df
 
-    def place_order_at_crossover(self, df):
+    def is_new_candle(self, candles):
+        last_timestamp = candles.iloc[-1].name
+        if last_timestamp > self.latest_timestamp:
+            return True
+        return False
+
+    def order_decision_from_candles(self, candles_df):
+        raise NotImplementedError
+
+    def handle_orders(self):
+        candles = self.get_candle_df()
+        if self.latest_timestamp is not None:
+            if self.is_new_candle(candles):
+                logging.info("New Candle")
+                self.order_decision_from_candles(candles)
+            else:
+                logging.info("No New Candle")
+        else:
+            self.order_decision_from_candles(candles)
+
+
+class MovingAverageStrategy(SimpleCandlesStrategy):
+    CHANNELS = Channel.PRIVATE + [
+        Channel.TICKER,
+        Channel.SYMBOLS,
+        Channel.PRICES,
+        Channel.L2,
+    ]
+
+    def __init__(
+        self,
+        symbol,
+        start_date,
+        rolling_window=30,
+        balance_fraction=0.1,
+        granularity=3600,
+        refresh_rate=60,
+        env=Environment.PROD,
+        **kwargs,
+    ):
+        super().__init__(
+            symbol,
+            start_date,
+            granularity=granularity,
+            refresh_rate=refresh_rate,
+            env=env,
+            **kwargs,
+        )
+        self.rolling_window = rolling_window
+        self.balance_fraction = balance_fraction
+
+    def order_decision_from_candles(self, df):
+        self.exchange.cancel_all_orders()
         df["closing_prices_rolling_average"] = df.close.rolling(
             self.rolling_window
         ).mean()
@@ -140,31 +188,91 @@ class SimpleStrategy(BaseTrader):
                 check_balance=True,
             )
 
-    def is_new_candle(self, candles):
-        last_timestamp = candles.iloc[-1].name
-        if last_timestamp > self.latest_timestamp:
+
+class ReversalCandleStrategy(SimpleCandlesStrategy):
+    def __init__(
+        self,
+        symbol,
+        start_date,
+        n_candles_before_reversal=30,
+        ignore_none_candles=30,
+        balance_fraction=0.1,
+        granularity=3600,
+        refresh_rate=60,
+        env=Environment.PROD,
+        **kwargs,
+    ):
+        super().__init__(
+            symbol,
+            start_date,
+            granularity=granularity,
+            refresh_rate=refresh_rate,
+            env=env,
+            **kwargs,
+        )
+        self.n_candles_before_reversal = n_candles_before_reversal
+        self.ignore_none_candles = ignore_none_candles
+        self.balance_fraction = balance_fraction
+
+    def is_reversal_candle(self, df):
+        if df.candle_color.iloc[-1] is None:
+            return False
+        if self.ignore_none_candles:
+            df = df[~df.candle_color.isna()]
+        if df.candle_color.iloc[-1] == df.candle_color.iloc[-2]:
+            return False
+
+        prior_n_candles = df.iloc[(-1 - self.n_candles_before_reversal) : -1]
+        if len(prior_n_candles.candle_color.unique()) == 1:
             return True
         return False
 
-    def handle_orders(self):
-        candles = self.get_candle_df()
-        if self.latest_timestamp is not None:
-            if self.is_new_candle(candles):
-                logging.info("New Candle")
-                self.exchange.cancel_all_orders()
-                self.place_order_at_crossover(candles)
-            else:
-                logging.info("No New Candle")
+    def order_decision_from_candles(self, df):
+        self.exchange.cancel_all_orders()
+        df.loc[df.close > df.open, "candle_color"] = "green"
+        df.loc[df.close < df.open, "candle_color"] = "red"
+        df.loc[df.close == df.open, "candle_color"] = None
+        if self.is_reversal_candle(df):
+            logging.info("REVERSAL CANDLE!!!!")
+            if df.candle_color.iloc[-1] == "green":
+                price = df.high.iloc[-1]
+                balance = self.exchange.get_available_balance(self.symbol.split("-")[1])
+                logging.info(
+                    f"Green Candle after at least {self.n_candles_before_reversal} Red canndles, "
+                    f"BUY at high of prior candle {price}"
+                )
+                self.exchange.place_order(
+                    symbol=self.symbol,
+                    order_type=OrderType.LIMIT,
+                    quantity=(balance * self.balance_fraction) / price,
+                    price=price,
+                    side=OrderSide.BUY,
+                    check_balance=True,
+                )
+            if df.candle_color.iloc[-1] == "red":
+                price = df.low.iloc[-1]
+                balance = self.exchange.get_available_balance(self.symbol.split("-")[0])
+                logging.info(
+                    f"Red Candle after at least {self.n_candles_before_reversal} green canndles, "
+                    f"SELL at high of prior candle {price}"
+                )
+                self.exchange.place_order(
+                    symbol=self.symbol,
+                    order_type=OrderType.LIMIT,
+                    quantity=balance * self.balance_fraction,
+                    price=price,
+                    side=OrderSide.SELL,
+                    check_balance=True,
+                )
         else:
-            self.exchange.cancel_all_orders()
-            self.place_order_at_crossover(candles)
+            logging.info("Not a reversal candle waiting.....")
 
 
 if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(message)s", level=logging.INFO
     )
-    ss = SimpleStrategy(
+    ss = ReversalCandleStrategy(
         "BTC-USD", start_date=datetime(2020, 4, 1), granularity=300, refresh_rate=60
     )
     ss.run_loop()
