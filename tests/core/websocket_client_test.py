@@ -4,8 +4,17 @@ from unittest.mock import Mock, patch
 
 import pytest
 import pytz
+from websocket import WebSocketTimeoutException
+
 from bcex.core.symbol import Symbol
-from bcex.core.websocket_client import BcexClient, Channel, ChannelStatus, Event
+from bcex.core.websocket_client import (
+    BcexClient,
+    Channel,
+    ChannelStatus,
+    Event,
+    Environment,
+    Action,
+)
 from iso8601 import iso8601
 from sortedcontainers import SortedDict
 
@@ -24,13 +33,87 @@ class TestChannel:
             (Channel.L2, True),
             (Channel.L3, True),
             (Channel.TRADING, False),
+            ("dymmy", None),
         ],
     )
     def test_is_symbol_specific(self, channel, is_symbol_specific):
-        assert Channel.is_symbol_specific(channel) == is_symbol_specific
+        if is_symbol_specific is not None:
+            assert Channel.is_symbol_specific(channel) == is_symbol_specific
+        else:
+            with pytest.raises(ValueError):
+                Channel.is_symbol_specific(channel)
 
 
 class TestBcexClient:
+    @patch("bcex.core.websocket_client.BcexClient._init_channel_status")
+    def test_init(self, mock_init_channel_status):
+        mock_init_channel_status.return_value = Mock()
+        client = BcexClient(
+            symbols=[Symbol.ETHBTC, Symbol.BTCPAX],
+            channels=None,
+            channel_kwargs={
+                Channel.TICKER: {"extra_dummy_ticket_arg": "dummy_val"},
+                Channel.PRICES: {"granularity": 300},
+            },
+            env=Environment.STAGING,
+            api_secret="dummy_key",
+            cancel_position_on_exit=False,
+        )
+        assert client.symbols == [Symbol.ETHBTC, Symbol.BTCPAX]
+        assert (
+            client.channel_kwargs[Channel.TICKER]["extra_dummy_ticket_arg"]
+            == "dummy_val"
+        )
+        assert client.channel_kwargs[Channel.PRICES]["granularity"] == 300
+        # channel_kwargs might contain extra default kwargs
+
+        assert client.api_secret == "dummy_key"
+        assert client.ws_url == "wss://ws.staging.blockchain.info/mercury-gateway/v1/ws"
+        assert client.origin == "https://pit.staging.blockchain.info"
+        assert not client.cancel_position_on_exit
+
+        assert mock_init_channel_status.call_count == 1
+
+        client = BcexClient(
+            symbols=[Symbol.ETHBTC, Symbol.BTCPAX],
+            channels=None,
+            channel_kwargs={
+                Channel.TICKER: {"extra_dummy_ticket_arg": "dummy_val"},
+                Channel.PRICES: {"granularity": 300},
+            },
+            env=Environment.PROD,
+            api_secret="dummy_key",
+            cancel_position_on_exit=False,
+        )
+        assert client.ws_url == "wss://ws.prod.blockchain.info/mercury-gateway/v1/ws"
+        assert client.origin == "https://exchange.blockchain.com"
+        with pytest.raises(ValueError):
+            BcexClient(symbols=[Symbol.BTCUSD], env="dummy_env")
+
+    @patch("bcex.core.websocket_client.threading")
+    @patch("bcex.core.websocket_client.webs")
+    def test_connect(self, mock_webs, mock_threading):
+        ws_mock = Mock()
+        thread_mock = Mock()
+        thread_mock.start = Mock()
+        thread_mock.daemon = False
+        mock_webs.WebSocketApp = Mock(return_value=ws_mock)
+        mock_threading.Thread = Mock(return_value=thread_mock)
+
+        client = BcexClient(symbols=["BTC-USD"])
+        client._subscribe_channels = Mock()
+        client._wait_for_ws_connect = Mock()
+        client.connect()
+
+        assert mock_webs.WebSocketApp.call_count == 1
+        assert mock_threading.Thread.call_count == 1
+
+        assert client.wst == thread_mock
+        assert client.wst.daemon is True
+        assert client.wst.start.call_count == 1
+        assert client._wait_for_ws_connect.call_count == 1
+        assert client._subscribe_channels.call_count == 1
+
     def test_on_price_updates(self):
         client = BcexClient(symbols=["BTC-USD"])
 
@@ -512,3 +595,181 @@ class TestBcexClient:
         client.on_ping()
         assert mock_datetime.now.call_count == 1
         assert client.exit.call_count == 1
+
+    def test_subscribe_channels(self):
+        client = BcexClient(
+            [Symbol.ETHBTC, Symbol.ALGOUSD],
+            channels=[Channel.HEARTBEAT, Channel.SYMBOLS],
+            api_secret="my_api_key",
+        )
+        client._public_subscription = Mock()
+        client._private_subscription = Mock()
+        client._subscribe_channels()
+
+        assert client._public_subscription.call_count == 1
+        assert client._private_subscription.call_count == 1
+
+        client._api_secret = None
+        client._subscribe_channels()
+        assert client._public_subscription.call_count == 2
+        assert client._private_subscription.call_count == 1
+
+    def test_public_subscriptions(self):
+        client = BcexClient(
+            [Symbol.ETHBTC, Symbol.ALGOUSD],
+            channels=[Channel.HEARTBEAT, Channel.SYMBOLS],
+            channel_kwargs={
+                Channel.SYMBOLS: {"dummy_arg": "dummy_val"},
+                Channel.HEARTBEAT: {"t": 5},
+            },
+        )
+        client._wait_for_confirmation = Mock()  # will test separately
+
+        ws_mock = Mock()
+        ws_mock.send = Mock()
+        client.ws = ws_mock
+
+        client._public_subscription()
+        assert ws_mock.send.call_count == 3  # 2 for the 2 symbols and 1 for heartbeat
+        subscriptions = [args[0][0] for args in ws_mock.send.call_args_list]
+        assert set(subscriptions) == {
+            json.dumps(
+                {
+                    "action": Action.SUBSCRIBE,
+                    "channel": Channel.SYMBOLS,
+                    "symbol": Symbol.ALGOUSD,
+                    "dummy_arg": "dummy_val",
+                }
+            ),
+            json.dumps(
+                {
+                    "action": Action.SUBSCRIBE,
+                    "channel": Channel.SYMBOLS,
+                    "symbol": Symbol.ETHBTC,
+                    "dummy_arg": "dummy_val",
+                }
+            ),
+            json.dumps(
+                {"action": Action.SUBSCRIBE, "channel": Channel.HEARTBEAT, "t": 5}
+            ),
+        }
+
+        assert (
+            client.channel_status[Channel.HEARTBEAT]
+            == ChannelStatus.WAITING_CONFIRMATION
+        )
+        assert (
+            client.channel_status[Channel.SYMBOLS][Symbol.ETHBTC]
+            == ChannelStatus.WAITING_CONFIRMATION
+        )
+        assert (
+            client.channel_status[Channel.SYMBOLS][Symbol.ALGOUSD]
+            == ChannelStatus.WAITING_CONFIRMATION
+        )
+
+        # make sure we will wait for the correct channels
+        assert client._wait_for_confirmation.call_count == 1
+        assert set(client._wait_for_confirmation.call_args[0][0]) == {
+            (Channel.HEARTBEAT, None),
+            (Channel.SYMBOLS, Symbol.ETHBTC),
+            (Channel.SYMBOLS, Symbol.ALGOUSD),
+        }
+
+    def test_private_subscriptions(self):
+        client = BcexClient(
+            [Symbol.ETHBTC, Symbol.ALGOUSD],
+            channels=[Channel.TRADING],
+            api_secret="my_api_tokennn",
+        )
+        client._wait_for_confirmation = Mock()  # will test separately
+        client._wait_for_authentication = Mock()  # will test separately
+
+        ws_mock = Mock()
+        ws_mock.send = Mock()
+        client.ws = ws_mock
+
+        client._private_subscription()
+        assert ws_mock.send.call_count == 2  # one for authentication, one for channel
+
+        # auth message sent
+        auth = ws_mock.send.call_args_list[0][0][0]
+        assert auth == json.dumps(
+            {
+                "channel": Channel.AUTH,
+                "action": Action.SUBSCRIBE,
+                "token": "my_api_tokennn",
+            }
+        )
+
+        # subscription channel message sent
+        subscriptions = ws_mock.send.call_args_list[1][0][0]
+        assert subscriptions == json.dumps(
+            {"action": Action.SUBSCRIBE, "channel": Channel.TRADING}
+        )
+
+        assert (
+            client.channel_status[Channel.TRADING] == ChannelStatus.WAITING_CONFIRMATION
+        )
+
+        # make sure we will wait for the correct channels
+        assert client._wait_for_confirmation.call_count == 1
+        assert client._wait_for_authentication.call_count == 1
+
+        assert set(client._wait_for_confirmation.call_args[0][0]) == {
+            (Channel.TRADING, None)
+        }
+
+    @patch("bcex.core.websocket_client.time")
+    def test_wait_for_authentication(self, mock_time):
+        mock_time.sleep = Mock()
+        client = BcexClient(
+            [Symbol.ETHBTC, Symbol.ALGOUSD],
+            channels=[Channel.TRADING],
+            api_secret="my_api_tokennn",
+        )
+        client.channel_status[Channel.AUTH] = ChannelStatus.UNSUBSCRIBED
+        with pytest.raises(WebSocketTimeoutException):
+            client._wait_for_authentication()
+
+        assert mock_time.sleep.call_count >= 1
+
+        mock_time.sleep.reset_mock()
+
+        client.channel_status[Channel.AUTH] = ChannelStatus.SUBSCRIBED
+        client._wait_for_authentication()
+        assert mock_time.sleep.call_count == 0
+
+    @patch("bcex.core.websocket_client.time")
+    def test_send_subscriptions_to_ws(self, mock_time):
+        mock_time.sleep = Mock()
+
+        channels = [Channel.HEARTBEAT, Channel.SYMBOLS]
+        client = BcexClient([Symbol.ETHBTC, Symbol.ALGOUSD], channels=channels)
+        subscriptions = [
+            (Channel.HEARTBEAT, None),
+            (Channel.SYMBOLS, Symbol.ETHBTC),
+            (Channel.SYMBOLS, Symbol.ALGOUSD),
+        ]
+        client.channel_status[Channel.HEARTBEAT] = ChannelStatus.WAITING_CONFIRMATION
+        client.channel_status[Channel.SYMBOLS][
+            Symbol.ETHBTC
+        ] = ChannelStatus.WAITING_CONFIRMATION
+        client.channel_status[Channel.SYMBOLS][
+            Symbol.ALGOUSD
+        ] = ChannelStatus.WAITING_CONFIRMATION
+
+        client._wait_for_confirmation(subscriptions)
+        assert mock_time.sleep.call_count == 5
+
+        mock_time.sleep.reset_mock()
+        client.channel_status[Channel.HEARTBEAT] = ChannelStatus.SUBSCRIBED
+        client.channel_status[Channel.SYMBOLS][
+            Symbol.ALGOUSD
+        ] = ChannelStatus.SUBSCRIBED
+        client._wait_for_confirmation(subscriptions)
+        assert mock_time.sleep.call_count == 5
+
+        mock_time.sleep.reset_mock()
+        client.channel_status[Channel.SYMBOLS][Symbol.ETHBTC] = ChannelStatus.SUBSCRIBED
+        client._wait_for_confirmation(subscriptions)
+        assert mock_time.sleep.call_count == 1

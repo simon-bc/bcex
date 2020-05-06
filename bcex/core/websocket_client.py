@@ -106,6 +106,9 @@ class BcexClient(object):
 
     Attributes
     ----------
+    ws: WebSocketClient
+    wst: Thread
+        websocket client thread
     balances : dict
     open_orders : dict
     channel_status: dict
@@ -115,9 +118,10 @@ class BcexClient(object):
             and value the status, str from the enum ChannelStatus
          - for non-symbol specific channels, the value is the status, str from the enum ChannelStatus
     tickers: dict
-    ws: WebSocketClient
-    wst: Thread
-        websocket client thread
+    l2_book: dict
+    market_trades: dict
+    candles: dict
+
     Notes
     -----
     Official documentation for the api can be found in https://exchange.blockchain.com/api/
@@ -350,6 +354,10 @@ class BcexClient(object):
         self.wst.start()
 
         # Wait for connection before continuing
+        self._wait_for_ws_connect()
+        self._subscribe_channels()
+
+    def _wait_for_ws_connect(self):
         conn_timeout = 5
         while (
             (not self.ws.sock or not self.ws.sock.connected)
@@ -358,14 +366,11 @@ class BcexClient(object):
         ):
             time.sleep(1)
             conn_timeout -= 1
-
         if not conn_timeout:  # i.e. if conn_timeout = 0
             logging.error("Couldn't connect to websocket! Exiting.")
             raise webs.WebSocketTimeoutException(
                 "Couldn't connect to websocket! Exiting."
             )
-
-        self._subscribe_channels()
 
     def on_open(self):
         """What to do when a new websocket opens
