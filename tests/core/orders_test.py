@@ -17,6 +17,7 @@ class TestOrder(object):
             order_type=OrderType.MARKET,
             order_quantity=1,
             side=OrderSide.SELL,
+            time_in_force=TimeInForce.GTC,
         )
         Order(
             symbol="BTC-USD",
@@ -77,10 +78,21 @@ class TestOrder(object):
             Order(
                 symbol="BTC-USD",
                 order_type=OrderType.MARKET,
-                price=1,
                 order_quantity=1,
                 side=OrderSide.SELL,
+                time_in_force=None,
             )
+
+        with pytest.raises(ValueError):
+            Order(
+                symbol="BTC-USD",
+                order_type=OrderType.MARKET,
+                price=100,
+                order_quantity=1,
+                side=OrderSide.SELL,
+                time_in_force=TimeInForce.GTC,
+            )
+
         with pytest.raises(ValueError):
             Order(
                 symbol="BTC-USD",
@@ -125,4 +137,5 @@ class TestOrder(object):
                 order_quantity=1,
                 side=OrderSide.SELL,
                 post_only=True,
+                time_in_force=TimeInForce.GTC,
             )
