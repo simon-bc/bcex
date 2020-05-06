@@ -2,18 +2,20 @@ Blockchain.com Exchange python client
 =====================================
 [![PyPi](https://img.shields.io/pypi/v/bcex.svg)](https://pypi.python.org/pypi/bcex)
 ![Python](https://img.shields.io/badge/Python-3.6+-green.svg)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 
-This is a sample python client to connect to the [Blockchain.com Exchange](https://exchange.blockchain.com).
+
+This is a sample python client to connect to the [Blockchain.com Exchange](https://exchange.blockchain.com) ([Api Doc](https://exchange.blockchain.com/api))
 
 In order to use the authenticated channels you will need to create an account on the exchange and generate an [API secret](https://exchange.blockchain.com/settings/api). You can then either pass the API secret to the client or you can store it as an enviroment variable BCEX_API_SECRET.
 
 To obtain access to staging environment, request to our support center needs to be made.
 
-The best starting place is to look at some of the [examples](https://github.com/simon-bc/bcex/tree/master/examples)
+The best starting place is to look at some of the [examples](https://github.com/simon-bc/bcex/tree/master/bcex/examples)
+
 
 Code formatting
 ---------------
-
 Install the python package `pre-commit`. This should probably be done in a
 non-virtualenv specific manner (i.e. using `pipsi`)
 
