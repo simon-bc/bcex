@@ -32,6 +32,8 @@ setuptools.setup(
         "sortedcontainers",
         "iso8601",
         "pytz",
+        "pandas",
+        "requests",
     ],
     tests_require=["pytest"],
     keywords=[

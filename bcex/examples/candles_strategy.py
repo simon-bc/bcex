@@ -249,9 +249,7 @@ class MovingAverageStrategy(CandlesStrategy):
         Channel.L2,
     ]
 
-    def __init__(
-        self, rolling_window=30, balance_fraction=0.1, **kwargs,
-    ):
+    def __init__(self, rolling_window=30, balance_fraction=0.1, **kwargs):
         """Initialise Strategy
 
         Parameters
@@ -337,7 +335,7 @@ class ReversalCandleStrategy(CandlesStrategy):
             the % of balance in given currency to place on order
         kwargs
         """
-        super().__init__(**kwargs,)
+        super().__init__(**kwargs)
         self.n_candles_before_reversal = n_candles_before_reversal
         self.ignore_none_candles = ignore_none_candles
         self.balance_fraction = balance_fraction
