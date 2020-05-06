@@ -11,17 +11,39 @@ from requests import get
 
 
 class SimpleCandlesStrategy(BaseTrader):
+    """This is the base class for simple candle strategies, this looks waits for new candles and then calls the
+    order_decision_from_candles method
+    """
+
     CHANNELS = Channel.PRIVATE + [Channel.TICKER, Channel.SYMBOLS, Channel.PRICES]
 
     def __init__(
         self,
         symbol,
         start_date,
+        heikin_ashi=False,
         granularity=3600,
         refresh_rate=60,
         env=Environment.PROD,
         **kwargs,
     ):
+
+        """Initialise Strategy
+
+        Parameters
+        ----------
+        symbol: Symbol
+        start_date : datetime
+        heikin_ashi : bool
+            whether or not to use heikin ashi candles
+        granularity : int
+            the granularity for the candles in seconds can be supported granularity values are:
+             60, 300, 900, 3600, 21600, 8640
+        refresh_rate : int
+            number of seconds before checking for new candle
+        env : Environment
+        kwargs : kwargs to pass to Interface
+        """
         channel_kwargs = {"prices": {"granularity": granularity}}
         super().__init__(
             symbol,
@@ -30,12 +52,20 @@ class SimpleCandlesStrategy(BaseTrader):
             channels_kwargs=channel_kwargs,
             **kwargs,
         )
+        self.heikin_ashi = heikin_ashi
         self.granularity = granularity
         self._historical_candles = None
         self.start_date = start_date
         self.latest_timestamp = None
 
     def get_historical_candles(self):
+        """Gets historical candle data from rest api
+
+        Returns
+        -------
+        df_res : pd.DataFrame
+            dataframe of the historical candles
+        """
         end_date = datetime.now(pytz.UTC)
         payload = {
             "symbol": self.symbol,
@@ -66,11 +96,19 @@ class SimpleCandlesStrategy(BaseTrader):
         return self._historical_candles
 
     def _check_candle_is_finished(self, rec):
+        """Checks if a given candle is complet"""
         return unixepoch2datetime(rec[0]) + timedelta(
             seconds=self.granularity
         ) < datetime.now(pytz.UTC)
 
     def get_latest_candles(self):
+        """Gets realtime candle data from websocket interface
+
+        Returns
+        -------
+        df_res : pd.DataFrame
+            dataframe of the realtime candles
+        """
         res = self.exchange.get_candles(self.symbol)
         if res:
             df_res = pd.DataFrame(
@@ -93,9 +131,16 @@ class SimpleCandlesStrategy(BaseTrader):
         return self.get_latest_candles()
 
     def get_candle_df(self):
+        """Gets df of all candle data
+
+        Returns
+        -------
+        df : pd.DataFrame
+            dataframe of candles
+        """
         live_candles = self.live_candles
         if live_candles.empty:
-            return self.historical_candles
+            return self.historical_candles.copy()
         min_time = live_candles.iloc[0].name
         historical_candles = self.historical_candles[
             self.historical_candles.index < min_time
@@ -104,12 +149,72 @@ class SimpleCandlesStrategy(BaseTrader):
         return df
 
     def is_new_candle(self, candles):
+        """Checks if there is a new candle in the dataframe
+
+        Parameters
+        ----------
+        candles : pd.DataFrame
+            dataframe of candles
+
+        Returns
+        -------
+        is_new_candle : bool
+        """
         last_timestamp = candles.iloc[-1].name
         if last_timestamp > self.latest_timestamp:
             return True
         return False
 
+    def make_candles_heikin_ashi(self, candles_df):
+        """Converts candles to heikin_ashi candles
+
+        Parameters
+        ----------
+        candles_df : pd.DataFrame
+            dataframe of candles
+
+        Returns
+        -------
+        candles_df : pd.DataFrame
+            dataframe of heikin_ashi candles
+        """
+        candles_df["ha_close"] = (
+            candles_df["open"]
+            + candles_df["close"]
+            + candles_df["high"]
+            + candles_df["low"]
+        ) / 4.0
+        candles_df["ha_open"] = (
+            (candles_df["open"] + candles_df["close"]) / 2.0
+        ).shift(1)
+        candles_df.loc[candles_df.ha_open.isna(), "ha_open"] = (
+            candles_df["open"] + candles_df["close"]
+        ) / 2
+        candles_df["ha_high"] = candles_df[["high", "ha_close", "ha_open"]].max(axis=1)
+        candles_df["ha_low"] = candles_df[["low", "ha_close", "ha_open"]].min(axis=1)
+        candles_df.drop(["high", "low", "open", "close"], axis=1, inplace=True)
+        candles_df.rename(
+            {
+                "ha_close": "close",
+                "ha_open": "open",
+                "ha_high": "high",
+                "ha_low": "low",
+            },
+            axis=1,
+            inplace=True,
+        )
+        return candles_df
+
     def act_on_new_candle(self, candles_df):
+        """Calls order_decision_from_candles and sets latest timestamp
+
+        Parameters
+        ----------
+        candles_df : pd.DataFrame
+            dataframe of candles
+        """
+        if self.heikin_ashi:
+            candles_df = self.make_candles_heikin_ashi(candles_df)
         self.order_decision_from_candles(candles_df)
         self.latest_timestamp = candles_df.iloc[-1].name
 
@@ -117,6 +222,8 @@ class SimpleCandlesStrategy(BaseTrader):
         raise NotImplementedError
 
     def handle_orders(self):
+        """Method called by the base trader class, this checks if theres a new candle
+        and calls the act_on_new_candle function if there is"""
         candles = self.get_candle_df()
         if self.latest_timestamp is not None:
             if self.is_new_candle(candles):
@@ -129,6 +236,12 @@ class SimpleCandlesStrategy(BaseTrader):
 
 
 class MovingAverageStrategy(SimpleCandlesStrategy):
+    """Strategy that looks at the n window moving average, if the close of the last candle was above we set a sell
+    order at the crossover point, and vise versa if it was below. This is to try to catch moment where the price moves
+    through the moving average
+
+    """
+
     CHANNELS = Channel.PRIVATE + [
         Channel.TICKER,
         Channel.SYMBOLS,
@@ -137,28 +250,30 @@ class MovingAverageStrategy(SimpleCandlesStrategy):
     ]
 
     def __init__(
-        self,
-        symbol,
-        start_date,
-        rolling_window=30,
-        balance_fraction=0.1,
-        granularity=3600,
-        refresh_rate=60,
-        env=Environment.PROD,
-        **kwargs,
+        self, rolling_window=30, balance_fraction=0.1, **kwargs,
     ):
-        super().__init__(
-            symbol,
-            start_date,
-            granularity=granularity,
-            refresh_rate=refresh_rate,
-            env=env,
-            **kwargs,
-        )
+        """Initialise Strategy
+
+        Parameters
+        ----------
+        rolling_window : int
+            the number of candles to look back on when computing moving average
+        balance_fraction : float
+            the % of balance in given currency to place on order
+        kwargs
+        """
+        super().__init__(**kwargs,)
         self.rolling_window = rolling_window
         self.balance_fraction = balance_fraction
 
     def order_decision_from_candles(self, df):
+        """Looks at candles computes moving average and places trade
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            dataframe of candles
+        """
         self.exchange.cancel_all_orders()
         df["closing_prices_rolling_average"] = df.close.rolling(
             self.rolling_window
@@ -199,31 +314,46 @@ class MovingAverageStrategy(SimpleCandlesStrategy):
 
 
 class ReversalCandleStrategy(SimpleCandlesStrategy):
+    """This Strategy looks for and trades on reversal candles, these are candles where the color changes after n of the
+     other color. For example if there are 5 green candles then 1 red, we sell at the limit price which is the close
+     of the prior candle"""
+
     def __init__(
         self,
-        symbol,
-        start_date,
         n_candles_before_reversal=3,
         ignore_none_candles=True,
         balance_fraction=0.1,
-        granularity=3600,
-        refresh_rate=60,
-        env=Environment.PROD,
         **kwargs,
     ):
-        super().__init__(
-            symbol,
-            start_date,
-            granularity=granularity,
-            refresh_rate=refresh_rate,
-            env=env,
-            **kwargs,
-        )
+        """Initialise Strategy
+
+        Parameters
+        ----------
+        n_candles_before_reversal : int
+            number of candles of the opposite color before a change is classed as a reversal
+        ignore_none_candles : bool
+            How to treat candles where the price does not change
+        balance_fraction : float
+            the % of balance in given currency to place on order
+        kwargs
+        """
+        super().__init__(**kwargs,)
         self.n_candles_before_reversal = n_candles_before_reversal
         self.ignore_none_candles = ignore_none_candles
         self.balance_fraction = balance_fraction
 
     def is_reversal_candle(self, df):
+        """Determines if the candle is a reversal candle
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            dataframe of candles
+
+        Returns
+        -------
+        is_reversal_candle : bool
+        """
         if df.candle_color.iloc[-1] is None:
             return False
         if self.ignore_none_candles:
@@ -237,6 +367,13 @@ class ReversalCandleStrategy(SimpleCandlesStrategy):
         return False
 
     def order_decision_from_candles(self, df):
+        """Looks at candles computes candle color and if it is a reversal candle and places trade
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            dataframe of candles
+        """
         self.exchange.cancel_all_orders()
         df.loc[df.close > df.open, "candle_color"] = "green"
         df.loc[df.close < df.open, "candle_color"] = "red"
@@ -281,7 +418,10 @@ if __name__ == "__main__":
     logging.basicConfig(
         format="%(asctime)s [%(levelname)s] %(message)s", level=logging.INFO
     )
-    ss = ReversalCandleStrategy(
-        "BTC-USD", start_date=datetime(2020, 4, 1), granularity=300, refresh_rate=60
+    ss = MovingAverageStrategy(
+        symbol="BTC-USD",
+        start_date=datetime(2020, 4, 1),
+        granularity=300,
+        refresh_rate=60,
     )
     ss.run_loop()
