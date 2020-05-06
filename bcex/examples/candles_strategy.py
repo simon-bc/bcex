@@ -11,7 +11,7 @@ from requests import get
 
 
 class CandlesStrategy(BaseTrader):
-    """This is the base class for simple candle strategies, this looks waits for new candles and then calls the
+    """This is the base class for simple candle strategies, this waits for new candles and then calls the
     order_decision_from_candles method
     """
 
@@ -421,5 +421,6 @@ if __name__ == "__main__":
         start_date=datetime(2020, 4, 1),
         granularity=300,
         refresh_rate=60,
+        env=Environment.STAGING,
     )
     ss.run_loop()
