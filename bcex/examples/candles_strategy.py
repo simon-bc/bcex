@@ -10,7 +10,7 @@ from bcex.examples.trader import BaseTrader
 from requests import get
 
 
-class SimpleCandlesStrategy(BaseTrader):
+class CandlesStrategy(BaseTrader):
     """This is the base class for simple candle strategies, this looks waits for new candles and then calls the
     order_decision_from_candles method
     """
@@ -235,7 +235,7 @@ class SimpleCandlesStrategy(BaseTrader):
             self.act_on_new_candle(candles)
 
 
-class MovingAverageStrategy(SimpleCandlesStrategy):
+class MovingAverageStrategy(CandlesStrategy):
     """Strategy that looks at the n window moving average, if the close of the last candle was above we set a sell
     order at the crossover point, and vise versa if it was below. This is to try to catch moment where the price moves
     through the moving average
@@ -313,7 +313,7 @@ class MovingAverageStrategy(SimpleCandlesStrategy):
             )
 
 
-class ReversalCandleStrategy(SimpleCandlesStrategy):
+class ReversalCandleStrategy(CandlesStrategy):
     """This Strategy looks for and trades on reversal candles, these are candles where the color changes after n of the
      other color. For example if there are 5 green candles then 1 red, we sell at the limit price which is the close
      of the prior candle"""
